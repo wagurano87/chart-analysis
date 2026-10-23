@@ -15,6 +15,7 @@ dist/
 !.env.example
 credentials*.json
 secrets*.json
+.streamlit/secrets.toml
 
 # Local inputs and generated results
 data/
