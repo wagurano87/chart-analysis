@@ -10,7 +10,7 @@ def chart_html(frame, timeframe, bins=32):
     dates = frame.index.strftime('%Y-%m-%d').tolist()
     fig = make_subplots(rows=6, cols=2, shared_xaxes=True, shared_yaxes=True,
                         column_widths=[.82, .18], row_heights=[.36, .12, .15, .15, .11, .11],
-                        horizontal_spacing=.02, vertical_spacing=.025,
+                        horizontal_spacing=.02, vertical_spacing=.035,
                         specs=[[{}, {}], [{}, None], [{}, None], [{}, None], [{}, None], [{}, None]])
     colors = ['#26a69a' if c >= o else '#ef5350' for c, o in zip(frame.Close, frame.Open)]
     fig.add_trace(go.Candlestick(x=x, open=frame.Open, high=frame.High, low=frame.Low,
@@ -47,15 +47,15 @@ def chart_html(frame, timeframe, bins=32):
         fig.update_yaxes(title_text=title, gridcolor='#1e293b', fixedrange=False,
                          showspikes=True, spikemode='across', spikesnap='cursor', row=row, col=1)
     fig.update_yaxes(range=[0, 100], row=5, col=1)
+    # Shared axes normally hide labels on upper panes. Keep dates directly below price.
+    fig.update_xaxes(showticklabels=True, side='bottom', ticks='outside',
+                     tickfont=dict(size=11), tickangle=0, row=1, col=1)
     fig.update_xaxes(title_text='VRVP 추정', showticklabels=False, row=1, col=2)
     fig.update_layout(height=1450, template='plotly_dark', paper_bgcolor='#0b1220', plot_bgcolor='#0b1220',
                       margin=dict(l=65,r=25,t=95,b=40), dragmode='pan', hovermode='x',
                       xaxis_rangeslider_visible=False, showlegend=True,
                       legend=dict(orientation='h',y=1.06,x=0,font=dict(size=10)),
-                      newshape=dict(line_color='#eab308'), uirevision='chart',
-                      updatemenus=[dict(type='buttons',direction='right',x=0,y=1.025,showactive=False,
-                                       buttons=[dict(label=label,method='relayout',args=[{'xaxis.range':[max(-.5,len(frame)-count-.5),len(frame)-.5]}])
-                                                for label,count in [('최근 60봉',60),('최근 180봉',180),('전체',len(frame))]])])
+                      newshape=dict(line_color='#eab308'), uirevision='chart')
     records = frame[['Low','High','Volume']].to_numpy().tolist()
     script = r'''
 const gd = document.getElementById('analysis-chart');
@@ -65,9 +65,19 @@ const dates = DATES;
 const binCount = BINS;
 const profileIndex = PROFILE;
 let busy = false;
+document.querySelectorAll('#range-toolbar button').forEach(button => {
+    button.addEventListener('click', () => {
+        const count = button.dataset.count === 'all' ? records.length : Number(button.dataset.count);
+        Plotly.relayout(gd, {'xaxis.range':[Math.max(-.5,records.length-count-.5),records.length-.5]});
+    });
+});
 function updateProfile(range) {
     const lo = Math.max(0, Math.ceil(Number(range[0]))), hi = Math.min(records.length-1, Math.floor(Number(range[1])));
     const visible = records.slice(lo, hi+1);
+    document.querySelectorAll('#range-toolbar button').forEach(button => {
+        const count = button.dataset.count === 'all' ? records.length : Math.min(records.length,Number(button.dataset.count));
+        button.setAttribute('aria-pressed',String(hi===records.length-1 && visible.length===count));
+    });
     if (!visible.length) {
         window.__volumeProfile = {first:lo,last:hi,volumes:[],centers:[],total:0,poc:null};
         document.getElementById('profile-status').textContent = '선택 범위에 봉이 없습니다.';
@@ -125,4 +135,15 @@ updateProfile([START, END]);
     html = fig.to_html(full_html=True, include_plotlyjs=True, div_id='analysis-chart', post_script=script,
                        config={'scrollZoom':True,'displaylogo':False,'responsive':True,
                                'modeBarButtonsToAdd':['drawline','drawrect','eraseshape'], 'toImageButtonOptions':{'filename':'chart-analysis'}})
-    return html.replace('<body>', '<body style="margin:0;background:#0b1220;color:#cbd5e1;font-family:sans-serif"><div id="profile-status" style="padding:8px;font-size:13px"></div>')
+    toolbar = '''<style>
+    #range-toolbar {display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:12px;border-bottom:1px solid #334155;}
+    #range-toolbar button {background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:9px 18px;cursor:pointer;font-size:14px;}
+    #range-toolbar button:hover {background:#334155;}
+    #range-toolbar button[aria-pressed="true"] {background:#2563eb;border-color:#60a5fa;color:white;}
+    #range-toolbar button:focus-visible {outline:2px solid #fbbf24;outline-offset:2px;}
+    </style><nav id="range-toolbar" aria-label="차트 표시 범위">
+    <button type="button" data-count="60" aria-pressed="false">최근 60봉</button>
+    <button type="button" data-count="180" aria-pressed="true">최근 180봉</button>
+    <button type="button" data-count="all" aria-pressed="false">전체</button>
+    </nav><div id="profile-status" style="padding:8px;font-size:13px"></div>'''
+    return html.replace('<body>', '<body style="margin:0;background:#0b1220;color:#cbd5e1;font-family:sans-serif">'+toolbar)

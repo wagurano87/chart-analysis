@@ -11,6 +11,7 @@ from data import demo_prices, fetch_prices, read_csv, symbols
 st.set_page_config(page_title="차트 분석 · Dual MACD", layout="wide")
 st.title("한국·미국 주식 차트 분석")
 st.caption("일봉·주봉 · MACD 6/19/9 + 19/39/9 · RSI · OBV · VRVP · 분석 결과는 자동 주문이나 수익 보장이 아닙니다.")
+timeframe = st.radio("차트 주기", ["일봉", "주봉"], horizontal=True, key="chart_timeframe")
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -29,7 +30,6 @@ with st.sidebar:
         uploaded = st.file_uploader("CSV: Date, Open, High, Low, Close, Volume", type="csv")
         submitted = st.form_submit_button("분석하기", type="primary")
     st.caption("한국: 005930(삼성전자), 000660(SK하이닉스)\n\n미국: AAPL·NVDA(NASDAQ), IBM(NYSE)")
-    timeframe = st.radio("차트 주기", ["일봉", "주봉"], horizontal=True)
     bins = st.select_slider("VRVP 가격 구간 수", options=[16, 24, 32, 48, 64], value=32)
     st.caption("CSV는 일봉을 입력하세요. 주봉은 일봉에서 합산합니다. 미국 거래소를 정확히 선택하세요.")
 
@@ -104,7 +104,7 @@ for window in (20, 60, 200):
 st.subheader(f"{timeframe} 종합 차트")
 st.caption("드래그로 이동 · 휠/도구막대로 확대 · 더블클릭 초기화 · 선/사각형 그리기 · 이미지 저장. 모든 지표의 시간축이 함께 움직입니다.")
 st.caption("VRVP는 화면에 보이는 봉만 대상으로 고가~저가에 거래량을 균등 배분한 추정치입니다. 확대·이동 시 다시 계산하며 노란 막대는 추정 POC(최대 거래량 가격대)입니다. 실제 가격별 체결량이나 TradingView VRVP와 동일하지 않습니다.")
-st.iframe(chart_html(frame, timeframe, bins), height=1500)
+st.iframe(chart_html(frame, timeframe, bins), height=1560)
 indicator_columns = st.columns(3)
 indicator_columns[0].metric("MACD (6,19,9)", f"{last.MACD6:.4f}")
 indicator_columns[1].metric("RSI (14)", f"{last.RSI:.2f}")
