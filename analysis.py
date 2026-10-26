@@ -43,19 +43,67 @@ def completed_daily_bars(frame, market, now=None):
 
 def indicators(frame):
     if len(frame) < 120:
-        raise ValueError("안정적인 MACD 계산을 위해 완료된 일봉이 최소 120개 필요합니다.")
+        raise ValueError("안정적인 지표 계산을 위해 선택한 주기의 완료된 봉이 최소 120개 필요합니다. 주봉은 약 3년 이상의 일봉을 입력하세요.")
     result = frame.copy()
     close = result.Close
     result["MACD"] = (close.ewm(span=19, adjust=False, min_periods=19).mean()
                       - close.ewm(span=39, adjust=False, min_periods=39).mean())
     result["Signal"] = result.MACD.ewm(span=9, adjust=False, min_periods=9).mean()
     result["Histogram"] = result.MACD - result.Signal
+    result["MACD6"] = (close.ewm(span=6, adjust=False, min_periods=6).mean()
+                       - close.ewm(span=19, adjust=False, min_periods=19).mean())
+    result["Signal6"] = result.MACD6.ewm(span=9, adjust=False, min_periods=9).mean()
+    result["Histogram6"] = result.MACD6 - result.Signal6
+    result["RSI"] = rsi(close)
+    result["OBV"] = (np.sign(close.diff()).fillna(0) * result.Volume).cumsum()
     for window in (20, 60, 200):
         result[f"MA{window}"] = close.rolling(window).mean()
     # Compare against prior sessions: today's volume must not inflate its own baseline.
     result["VolumeAvg20"] = result.Volume.shift(1).rolling(20).mean()
     result["VolumeRatio"] = result.Volume / result.VolumeAvg20.replace(0, np.nan)
     return result
+
+
+def rsi(close, period=14):
+    """Wilder smoothing seeded with the first period's simple average."""
+    changes = close.diff()
+    gains, losses = changes.clip(lower=0), -changes.clip(upper=0)
+    output = pd.Series(np.nan, index=close.index)
+    if len(close) <= period:
+        return output
+    gain, loss = gains.iloc[1:period + 1].mean(), losses.iloc[1:period + 1].mean()
+    for index in range(period, len(close)):
+        if index > period:
+            gain = (gain * (period - 1) + gains.iloc[index]) / period
+            loss = (loss * (period - 1) + losses.iloc[index]) / period
+        output.iloc[index] = (50 if gain == loss == 0 else 100 if loss == 0
+                             else 100 - 100 / (1 + gain / loss))
+    return output
+
+
+def resample_bars(daily, market, timeframe, now=None):
+    if timeframe == "일봉":
+        return daily.copy()
+    if timeframe != "주봉":
+        raise ValueError("지원하지 않는 주기입니다.")
+    if daily.empty:
+        return daily.copy()
+    zone = ZoneInfo("Asia/Seoul" if market == "한국" else "America/New_York")
+    local = (now or datetime.now(zone)).astimezone(zone)
+    cutoff = time(16) if market == "한국" else time(17)
+    weekly = daily.resample("W-FRI").agg({"Open": "first", "High": "max", "Low": "min",
+                                          "Close": "last", "Volume": "sum"}).dropna()
+    # Friday label represents the week, not necessarily the last actual trade date.
+    # Holiday weeks are conservatively held until the normal Friday cutoff.
+    available = weekly.index.date < local.date()
+    if local.time() >= cutoff:
+        available = weekly.index.date <= local.date()
+    # Don't include the first potentially partial week of a clipped history window.
+    first_monday = daily.index.min().to_period("W-SUN").start_time
+    if daily.index.min() > first_monday:
+        weekly = weekly.loc[weekly.index >= first_monday + pd.Timedelta(days=7)]
+        available = weekly.index.date < local.date() if local.time() < cutoff else weekly.index.date <= local.date()
+    return weekly.loc[available]
 
 
 def assess(frame):
@@ -78,9 +126,9 @@ def assess(frame):
         level = "뚜렷한 하향 경고 없음"
     reasons = []
     if falling:
-        reasons.append("MACD선이 직전 일봉보다 하락했습니다.")
+        reasons.append("MACD(19,39,9)선이 직전 봉보다 하락했습니다.")
     if falling_three:
-        reasons.append("MACD선이 3거래일 연속 하락했습니다.")
+        reasons.append("MACD(19,39,9)선이 3개 봉 연속 하락했습니다.")
     if death_cross:
         reasons.append("MACD선이 시그널선을 아래로 돌파했습니다(데드크로스).")
     elif below_signal:

@@ -26,7 +26,7 @@ def fetch_prices(value, market, exchange):
     candidates, tv_symbol = symbols(value, market, exchange)
     for symbol in candidates:
         try:
-            frame = yf.download(symbol, period="2y", interval="1d", auto_adjust=True,
+            frame = yf.download(symbol, period="5y", interval="1d", auto_adjust=True,
                                 progress=False, threads=False, timeout=15)
         except Exception as error:
             raise RuntimeError("시세 제공처에 연결할 수 없습니다. 네트워크 상태를 확인하거나 CSV를 사용하세요.") from error
@@ -48,7 +48,7 @@ def read_csv(file):
 def demo_prices():
     """Clearly synthetic sample with a late downturn; never a real stock quote."""
     rng = np.random.default_rng(42)
-    close = np.r_[np.linspace(80, 160, 240), np.linspace(160, 120, 40)]
+    close = np.r_[np.linspace(80, 160, 1260), np.linspace(160, 120, 40)]
     close = close + rng.normal(0, .3, len(close))
     opening = close * 1.002
     volume = rng.integers(80000, 120000, len(close))
