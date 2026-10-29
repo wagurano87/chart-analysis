@@ -36,6 +36,17 @@ def chart_html(frame, timeframe, bins=32):
     for row, name, color in [(5, 'RSI', '#c084fc'), (6, 'OBV', '#fbbf24')]:
         fig.add_trace(go.Scatter(x=x, y=frame[name], name=name, line=dict(color=color, width=2), customdata=dates,
                                 hovertemplate='%{customdata}<br>'+name+': %{y:,.2f}<extra></extra>'), row=row, col=1)
+    signal_positions = [i for i, value in enumerate(frame.MACD19SellSignal) if value]
+    for row, column in [(1, 'High'), (4, 'MACD')]:
+        fig.add_trace(go.Scatter(
+            x=signal_positions, y=frame[column].iloc[signal_positions], mode='markers',
+            name='0선 돌파 후 오실레이터 음전환',
+            marker=dict(symbol='triangle-down', size=14, color='#ff4d8d',
+                        line=dict(color='#ffffff', width=1)),
+            customdata=[[dates[i], float(frame.MACD.iloc[i]), float(frame.Histogram.iloc[i])]
+                        for i in signal_positions],
+            hovertemplate='%{customdata[0]}<br><b>매도 주의 시그널</b><br>0선 상향 돌파 후 MACD 양수 유지·오실레이터 음전환<br>MACD %{customdata[1]:.4f}<br>오실레이터 %{customdata[2]:.4f}<extra></extra>'
+        ), row=row, col=1)
     for value in (30, 70):
         fig.add_hline(y=value, line_dash='dot', line_color='#94a3b8', row=5, col=1)
     start = max(0, len(frame) - 60)

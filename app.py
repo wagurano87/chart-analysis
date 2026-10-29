@@ -77,6 +77,9 @@ if tv_symbol is None:
 
 notify = st.error if signal["level"] == "위험" else st.warning if signal["level"] == "주의" else st.info
 notify(f"매도 검토 경고: {signal['level']} · {timeframe} MACD(19,39,9)")
+sell_events = frame.loc[frame.MACD19SellSignal]
+if bool(last.MACD19SellSignal):
+    st.warning(f"▼ 새 매도 주의 시그널 · {frame.index[-1]:%Y-%m-%d}: MACD 0선 상향 돌파 후 양수 구간에서 오실레이터가 음수로 전환했습니다.")
 with st.expander("경고 근거 보기"):
     for reason in signal["reasons"]:
         st.write("• " + reason)
@@ -90,7 +93,16 @@ columns[3].metric("직전 20봉 평균 대비 거래량", "계산 불가" if pd.
 st.subheader(f"{timeframe} 종합 차트")
 st.caption("기본 최근 60봉 · 드래그로 이동 · 휠/도구막대로 확대 · 더블클릭 초기화 · 선/사각형 그리기 · 이미지 저장. 모든 지표의 시간축이 함께 움직입니다.")
 st.caption("우측 VRVP는 표시 구간의 봉 데이터로 추정한 거래량 분포입니다. 노란 막대는 추정 POC입니다.")
+st.caption("분홍색 ▼: MACD(19,39,9) 0선 상향 돌파 후 양수 유지 중 오실레이터(MACD−시그널선)가 음수로 바뀐 봉. 가격·MACD 패널에 함께 표시합니다.")
 st.iframe(chart_html(frame, timeframe, bins), height=1490)
+with st.expander(f"오실레이터 음전환 시그널 내역 · {len(sell_events)}회"):
+    if sell_events.empty:
+        st.write("조회한 데이터에서 해당 조건이 발생하지 않았습니다.")
+    else:
+        st.dataframe(sell_events[['Close', 'MACD', 'Signal', 'Histogram']].sort_index(ascending=False)
+                     .rename(columns={'Close':'종가','Signal':'시그널선','Histogram':'오실레이터'})
+                     .rename_axis('일자'), width='stretch')
+    st.caption("조회 구간에서 확인된 0선 상향 돌파 이후만 계산합니다. MACD가 0 이하가 되면 조건을 초기화합니다. 음수 유지 중에는 반복 표시하지 않으며, 다시 0 이상으로 회복 후 음전환하면 재표시합니다. 주봉도 동일한 규칙입니다.")
 indicator_columns = st.columns(3)
 indicator_columns[0].metric("MACD (6,19,9)", f"{last.MACD6:.4f}")
 indicator_columns[1].metric("RSI (14)", f"{last.RSI:.2f}")

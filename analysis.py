@@ -50,6 +50,7 @@ def indicators(frame):
                       - close.ewm(span=39, adjust=False, min_periods=39).mean())
     result["Signal"] = result.MACD.ewm(span=9, adjust=False, min_periods=9).mean()
     result["Histogram"] = result.MACD - result.Signal
+    result["MACD19SellSignal"] = oscillator_sell_signals(result.MACD, result.Histogram)
     result["MACD6"] = (close.ewm(span=6, adjust=False, min_periods=6).mean()
                        - close.ewm(span=19, adjust=False, min_periods=19).mean())
     result["Signal6"] = result.MACD6.ewm(span=9, adjust=False, min_periods=9).mean()
@@ -62,6 +63,27 @@ def indicators(frame):
     result["VolumeAvg20"] = result.Volume.shift(1).rolling(20).mean()
     result["VolumeRatio"] = result.Volume / result.VolumeAvg20.replace(0, np.nan)
     return result
+
+
+def oscillator_sell_signals(macd, histogram):
+    """Negative histogram crosses within an observed positive MACD regime.
+
+    Require an observed <=0 -> >0 MACD cross. Do not infer a crossing before
+    the available history. A new histogram crossing can trigger again in the
+    same positive regime; consecutive negative bars cannot.
+    """
+    signals = pd.Series(False, index=macd.index, dtype=bool)
+    armed = False
+    for i in range(1, len(macd)):
+        current, previous = macd.iloc[i], macd.iloc[i - 1]
+        if pd.isna(current) or pd.isna(previous) or current <= 0:
+            armed = False
+            continue
+        if armed and histogram.iloc[i - 1] >= 0 and histogram.iloc[i] < 0:
+            signals.iloc[i] = True
+        if previous <= 0 < current:
+            armed = True
+    return signals
 
 
 def rsi(close, period=14):
