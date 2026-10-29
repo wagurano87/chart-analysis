@@ -77,8 +77,9 @@ if tv_symbol is None:
 
 notify = st.error if signal["level"] == "위험" else st.warning if signal["level"] == "주의" else st.info
 notify(f"매도 검토 경고: {signal['level']} · {timeframe} MACD(19,39,9)")
-for reason in signal["reasons"]:
-    st.write("• " + reason)
+with st.expander("경고 근거 보기"):
+    for reason in signal["reasons"]:
+        st.write("• " + reason)
 
 columns = st.columns(4)
 columns[0].metric(("종가 (KRW)" if market == "한국" else "종가 (USD)") if tv_symbol else "가상 종가", f"{last.Close:,.2f}", f"{(last.Close / prev.Close - 1) * 100:+.2f}%")
@@ -86,30 +87,32 @@ columns[1].metric("MACD (19,39)", f"{last.MACD:,.4f}", f"{last.MACD - prev.MACD:
 columns[2].metric("시그널 (9)", f"{last.Signal:,.4f}")
 columns[3].metric("직전 20봉 평균 대비 거래량", "계산 불가" if pd.isna(last.VolumeRatio) else f"{last.VolumeRatio:.2f}배")
 
-st.subheader("거래량과 가격 흐름")
-if signal["distribution"]:
-    st.write("종가가 하락하면서 거래량이 직전 20봉 평균의 1.5배 이상입니다. 매도 압력 가능성에 주의하세요. 거래 주체의 의도까지 확인한 것은 아닙니다.")
-elif pd.isna(last.VolumeRatio):
-    st.write("비교 기간의 평균 거래량이 0이어서 배율을 계산할 수 없습니다.")
-elif last.VolumeRatio >= 1.5 and last.Close > prev.Close:
-    st.write("종가 상승과 거래량 증가가 동반됐습니다. 추세 지속 여부를 다음 봉과 함께 확인하세요.")
-elif last.VolumeRatio < .5:
-    st.write("거래량이 평소의 절반 미만입니다. 가격 움직임의 참여 강도가 약할 수 있습니다.")
-else:
-    st.write("1.5배 이상 거래량 증가를 동반한 종가 하락 조건은 발생하지 않았습니다.")
-for window in (20, 60, 200):
-    average = last[f"MA{window}"]
-    st.write(f"{window}{period} 이동평균: 데이터 부족" if pd.isna(average) else f"{window}{period} 이동평균 {average:,.2f} · 종가는 이동평균 {'위' if last.Close >= average else '아래'}")
-
 st.subheader(f"{timeframe} 종합 차트")
-st.caption("드래그로 이동 · 휠/도구막대로 확대 · 더블클릭 초기화 · 선/사각형 그리기 · 이미지 저장. 모든 지표의 시간축이 함께 움직입니다.")
-st.caption("VRVP는 화면에 보이는 봉만 대상으로 고가~저가에 거래량을 균등 배분한 추정치입니다. 확대·이동 시 다시 계산하며 노란 막대는 추정 POC(최대 거래량 가격대)입니다. 실제 가격별 체결량이나 TradingView VRVP와 동일하지 않습니다.")
-st.iframe(chart_html(frame, timeframe, bins), height=1560)
+st.caption("기본 최근 60봉 · 드래그로 이동 · 휠/도구막대로 확대 · 더블클릭 초기화 · 선/사각형 그리기 · 이미지 저장. 모든 지표의 시간축이 함께 움직입니다.")
+st.caption("우측 VRVP는 표시 구간의 봉 데이터로 추정한 거래량 분포입니다. 노란 막대는 추정 POC입니다.")
+st.iframe(chart_html(frame, timeframe, bins), height=1490)
 indicator_columns = st.columns(3)
 indicator_columns[0].metric("MACD (6,19,9)", f"{last.MACD6:.4f}")
 indicator_columns[1].metric("RSI (14)", f"{last.RSI:.2f}")
 indicator_columns[2].metric("OBV", f"{last.OBV:,.0f}")
 st.caption("RSI: Wilder 방식, 30·70 기준선. OBV: 첫 봉 0에서 시작해 종가 상승 시 거래량을 더하고 하락 시 뺍니다. 새 지표는 표시용이며 경고 판정은 기존 MACD(19,39,9) 규칙을 사용합니다.")
+
+with st.expander("거래량·이동평균 상세 분석"):
+    st.subheader("거래량과 가격 흐름")
+    if signal["distribution"]:
+        st.write("종가가 하락하면서 거래량이 직전 20봉 평균의 1.5배 이상입니다. 매도 압력 가능성에 주의하세요. 거래 주체의 의도까지 확인한 것은 아닙니다.")
+    elif pd.isna(last.VolumeRatio):
+        st.write("비교 기간의 평균 거래량이 0이어서 배율을 계산할 수 없습니다.")
+    elif last.VolumeRatio >= 1.5 and last.Close > prev.Close:
+        st.write("종가 상승과 거래량 증가가 동반됐습니다. 추세 지속 여부를 다음 봉과 함께 확인하세요.")
+    elif last.VolumeRatio < .5:
+        st.write("거래량이 평소의 절반 미만입니다. 가격 움직임의 참여 강도가 약할 수 있습니다.")
+    else:
+        st.write("1.5배 이상 거래량 증가를 동반한 종가 하락 조건은 발생하지 않았습니다.")
+    for window in (20, 60, 200):
+        average = last[f"MA{window}"]
+        st.write(f"{window}{period} 이동평균: 데이터 부족" if pd.isna(average) else f"{window}{period} 이동평균 {average:,.2f} · 종가는 이동평균 {'위' if last.Close >= average else '아래'}")
+
 
 if tv_symbol:
     st.subheader("TradingView 차트")
