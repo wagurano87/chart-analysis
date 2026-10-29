@@ -27,14 +27,15 @@ class AppTests(unittest.TestCase):
         self.assertTrue(any("6자리" in item.value for item in app.error))
         self.assertEqual(len(app.metric), 0)
 
-    def test_online_result_builds_tradingview_and_same_data_chart(self):
+    def test_online_result_shows_only_analysis_chart(self):
         with patch("data.fetch_prices", return_value=(demo_prices(), "005930.KS", "KRX:005930")):
             app = AppTest.from_file(APP, default_timeout=30).run()
             app.button[0].click().run()
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(len(app.metric), 7)
-        self.assertEqual(len(app.get("iframe")), 2)
-        self.assertIn('KRX:005930', app.get("iframe")[1].proto.srcdoc)
+        self.assertEqual(len(app.get("iframe")), 1)
+        self.assertIn('analysis-chart', app.get("iframe")[0].proto.srcdoc)
+        self.assertNotIn('s3.tradingview.com', app.get("iframe")[0].proto.srcdoc)
 
     def test_failed_request_clears_previous_signals(self):
         app = AppTest.from_file(APP, default_timeout=30).run()

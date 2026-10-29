@@ -1,5 +1,4 @@
 """Streamlit entry point: streamlit run app.py"""
-import json
 
 import pandas as pd
 import streamlit as st
@@ -15,9 +14,9 @@ timeframe = st.radio("차트 주기", ["일봉", "주봉"], horizontal=True, key
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def load_prices(ticker, market, exchange):
+def load_prices(ticker, market):
     """Five years of daily prices for daily and weekly analysis."""
-    return fetch_prices(ticker, market, exchange)
+    return fetch_prices(ticker, market, "NASDAQ")
 
 
 with st.sidebar:
@@ -26,12 +25,11 @@ with st.sidebar:
         mode = st.selectbox("데이터", ["온라인 시세", "CSV 업로드", "가상 데이터 체험"])
         market = st.selectbox("시장", ["한국", "미국"])
         ticker = st.text_input("한국 6자리 코드 / 미국 티커", "005930")
-        exchange = st.selectbox("미국 TradingView 거래소 (미국 선택 시 적용)", ["NASDAQ", "NYSE", "AMEX"])
         uploaded = st.file_uploader("CSV: Date, Open, High, Low, Close, Volume", type="csv")
         submitted = st.form_submit_button("분석하기", type="primary")
     st.caption("한국: 005930(삼성전자), 000660(SK하이닉스)\n\n미국: AAPL·NVDA(NASDAQ), IBM(NYSE)")
     bins = st.select_slider("VRVP 가격 구간 수", options=[16, 24, 32, 48, 64], value=32)
-    st.caption("CSV는 일봉을 입력하세요. 주봉은 일봉에서 합산합니다. 미국 거래소를 정확히 선택하세요.")
+    st.caption("CSV는 일봉을 입력하세요. 주봉은 일봉에서 합산합니다.")
 
 if submitted:
     try:
@@ -41,10 +39,10 @@ if submitted:
             elif mode == "CSV 업로드":
                 if uploaded is None:
                     raise ValueError("CSV 파일을 선택하세요.")
-                _, tv_symbol = symbols(ticker, market, exchange)
+                _, tv_symbol = symbols(ticker, market)
                 raw, provider = read_csv(uploaded), "사용자 CSV · 수정주가 여부는 파일 제공 기준"
             else:
-                raw, provider, tv_symbol = load_prices(ticker, market, exchange)
+                raw, provider, tv_symbol = load_prices(ticker, market)
             bars = completed_daily_bars(raw, market)
             removed = len(raw) - len(bars)
             st.session_state["analysis_result"] = (bars, provider, tv_symbol, market, ticker, removed, mode)
@@ -125,13 +123,6 @@ with st.expander("거래량·이동평균 상세 분석"):
         average = last[f"MA{window}"]
         st.write(f"{window}{period} 이동평균: 데이터 부족" if pd.isna(average) else f"{window}{period} 이동평균 {average:,.2f} · 종가는 이동평균 {'위' if last.Close >= average else '아래'}")
 
-
-if tv_symbol:
-    st.subheader("TradingView 차트")
-    st.caption("외부 TradingView 위젯입니다. 시세 제공처·수정주가·갱신 시점 차이로 위 분석값과 다를 수 있습니다. 위젯의 지표를 바꿔도 본 앱의 MACD(19,39,9) 계산은 바뀌지 않습니다.")
-    config = json.dumps({"autosize": True, "symbol": tv_symbol, "interval": "D" if timeframe == "일봉" else "W", "timezone": "Asia/Seoul" if market == "한국" else "America/New_York", "theme": "light", "style": "1", "locale": "kr", "allow_symbol_change": False, "calendar": False})
-    st.iframe('<div class="tradingview-widget-container" style="height:600px;width:100%"><div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div><div class="tradingview-widget-copyright"><a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView에서 차트 보기</a></div><script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>' + config + '</script></div>', height=640)
-    st.caption("위젯이 보이지 않으면 브라우저의 외부 스크립트 차단이나 종목 지원 여부를 확인하세요.")
 
 with st.expander("위험 신호 계산 기준과 한계"):
     st.markdown("""- MACD = EMA(종가,19) − EMA(종가,39), 시그널 = EMA(MACD,9).
