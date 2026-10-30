@@ -146,3 +146,6 @@ with st.expander("위험 신호 계산 기준과 한계"):
 - 횡보장에서는 거짓 신호가 생기고 추세 전환을 늦게 알릴 수 있습니다. 신호의 수익성·정확도는 백테스트하지 않았습니다.
 - 앱을 다시 분석할 때만 신호가 갱신됩니다. 푸시·텔레그램 알림과 자동 매도는 없습니다.""")
 st.download_button("분석 데이터 CSV 저장", frame.to_csv(index_label="Date").encode("utf-8-sig"), file_name=f"chart-analysis-{timeframe}.csv", mime="text/csv")
+
+from fundamentals import render_fundamentals
+render_fundamentals(provider, mode)
