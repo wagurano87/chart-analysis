@@ -91,6 +91,8 @@ def chart_html(frame, timeframe, bins=32):
                        text=f'{frame.Close.iloc[-1]:,.2f}', showarrow=False, xanchor='left',
                        bgcolor=last_color, borderpad=4, font=dict(color='white', size=12),
                        name='last-close')
+    # Only drawings added by the user can be selected or deleted.
+    fig.update_shapes(editable=False)
     # Shared axes normally hide labels on upper panes. Keep dates directly below price.
     fig.update_xaxes(showticklabels=True, side='bottom', ticks='outside',
                      tickfont=dict(size=11), tickangle=0, row=1, col=1)
@@ -112,6 +114,69 @@ const binCount = BINS;
 const profileIndex = PROFILE;
 let busy = false;
 let averagesVisible = true;
+const protectedShapeCount = (gd.layout.shapes || []).length;
+let shapeCount = protectedShapeCount;
+let selectedShape = null;
+let deletingShape = false;
+gd.tabIndex = 0;
+gd.setAttribute('aria-label','분석 차트. 추세선 선택 후 Delete로 삭제, Escape로 선택 해제');
+function showShapeSelection() {
+    gd.querySelectorAll('.shape-group[data-index]').forEach(node=>{
+        node.classList.toggle('selected-drawing', Number(node.dataset.index)===selectedShape);
+    });
+    document.getElementById('delete-shape').disabled=selectedShape===null || deletingShape;
+    document.getElementById('drawing-status').textContent=selectedShape===null
+        ? '추세선·사각형을 클릭해 선택 → Delete로 삭제 · Esc 선택 해제'
+        : '도형 선택됨 · Delete로 삭제 · Esc 선택 해제';
+}
+function selectShape(index) {
+    selectedShape=Number.isInteger(index) && index>=protectedShapeCount &&
+        index<(gd.layout.shapes || []).length ? index : null;
+    showShapeSelection();
+}
+gd.addEventListener('pointerdown',event=>{
+    if(event.button!==0) return;
+    const shape=event.target.closest('.shape-group[data-index]');
+    selectShape(shape ? Number(shape.dataset.index) : null);
+    gd.focus({preventScroll:true});
+},true);
+// Plotly rebuilds its SVG paths when a drawing is activated by a click.
+gd.addEventListener('click',()=>requestAnimationFrame(showShapeSelection),true);
+gd.on('plotly_afterplot',showShapeSelection);
+gd.on('plotly_relayout',event=>{
+    if(!Object.keys(event).some(key=>key==='shapes' || key.startsWith('shapes['))) return;
+    const count=(gd.layout.shapes || []).length;
+    if(count>shapeCount) {
+        selectShape(count-1);
+        gd.focus({preventScroll:true});
+    } else if(count<shapeCount) selectShape(null);
+    shapeCount=count;
+    showShapeSelection();
+});
+async function deleteSelectedShape() {
+    const index=selectedShape, shapes=gd.layout.shapes || [];
+    if(deletingShape || index===null || index<protectedShapeCount || index>=shapes.length) return;
+    deletingShape=true;
+    selectShape(null);
+    try {
+        await Plotly.relayout(gd,{shapes:shapes.filter((_,i)=>i!==index)});
+    } finally {
+        deletingShape=false;
+        showShapeSelection();
+        gd.focus({preventScroll:true});
+    }
+}
+gd.addEventListener('keydown',event=>{
+    if(event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])')) return;
+    if(event.key==='Escape') selectShape(null);
+    if(event.key==='Delete' && !event.repeat && !event.ctrlKey && !event.altKey && !event.metaKey && selectedShape!==null) {
+        event.preventDefault();
+        event.stopPropagation();
+        deleteSelectedShape();
+    }
+});
+document.getElementById('delete-shape').addEventListener('click',deleteSelectedShape);
+showShapeSelection();
 const number = (n, digits=2) => n===null || !Number.isFinite(n) ? '—' :
     Number(n).toLocaleString('ko-KR',{maximumFractionDigits:digits});
 function showCandle(index) {
@@ -277,6 +342,11 @@ updateProfile([START, END]);
     #chart-toolbar button:hover {background:#293346;color:white;}
     #chart-toolbar button[aria-pressed="true"] {background:#24385c;color:#93bbff;border-color:#3b5989;}
     #chart-toolbar button:focus-visible {outline:2px solid #fbbf24;outline-offset:2px;}
+    #chart-toolbar button:disabled {opacity:.4;cursor:default;}
+    #analysis-chart:focus {outline:none;}
+    #analysis-chart:focus-visible {outline:1px solid #60a5fa;outline-offset:-1px;}
+    .selected-drawing path {filter:drop-shadow(0 0 3px #93c5fd);stroke:#93c5fd!important;}
+    #drawing-status {padding:2px 14px;font-size:11px;color:#94a3b8;}
     .crosshair {position:absolute;pointer-events:none;z-index:20;display:none;}
     #cross-v {border-left:1px dashed #959eaf;}
     #cross-h {border-top:1px dashed #959eaf;}
@@ -293,9 +363,9 @@ updateProfile([START, END]);
     <button type="button" data-mode="zoom" aria-pressed="false" title="드래그한 구간 확대">확대</button>
     <button type="button" data-mode="drawline" aria-pressed="false">추세선</button>
     <button type="button" data-mode="drawrect" aria-pressed="false">사각형</button>
-    <button type="button" data-mode="eraseshape" aria-pressed="false" title="그린 도형을 클릭해 지우기">지우기</button>
+    <button type="button" id="delete-shape" disabled title="선택한 도형 삭제 (Delete)">지우기 · Del</button>
     <button type="button" id="toggle-ma" aria-pressed="true" title="이동평균선 표시 전환">MA</button>
     <button type="button" id="reset-view" title="최근 60봉과 자동 눈금으로 돌아가기">기본 보기</button>
     <button type="button" id="save-image" title="차트를 PNG 이미지로 저장">PNG 저장</button>
-    </nav></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="profile-status" style="padding:3px 14px 6px;font-size:11px;color:#8e9bb0"></div>'''
+    </nav></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="drawing-status" role="status"></div><div id="profile-status" style="padding:3px 14px 6px;font-size:11px;color:#8e9bb0"></div>'''
     return html.replace('<body>', '<body style="margin:0;background:#131722;color:#cbd5e1;font-family:sans-serif">'+toolbar)
