@@ -10,7 +10,14 @@ from data import demo_prices, fetch_prices, read_csv, symbols
 st.set_page_config(page_title="차트 분석 · Dual MACD", layout="wide")
 st.title("한국·미국 주식 차트 분석")
 st.caption("일봉·주봉 · MACD 6/19/9 + 19/39/9 · RSI · OBV · VRVP · 분석 결과는 자동 주문이나 수익 보장이 아닙니다.")
-timeframe = st.radio("차트 주기", ["일봉", "주봉"], horizontal=True, key="chart_timeframe")
+st.markdown("""<style>
+[data-testid="stMainBlockContainer"] {padding-top:3.5rem;padding-bottom:2rem;}
+[data-testid="stMain"] h1 {font-size:1.65rem;}
+[data-testid="stMain"] h3 {font-size:1.2rem;}
+[data-testid="stRadio"] [role="radiogroup"] {gap:6px;}
+[data-testid="stRadio"] label {border:1px solid #475569;border-radius:5px;padding:6px 16px;}
+[data-testid="stRadio"] label:has(input:checked) {background:#1d4ed8;border-color:#60a5fa;color:white;}
+</style>""", unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=900, show_spinner=False)
@@ -55,6 +62,10 @@ if "analysis_result" not in st.session_state:
     st.stop()
 
 daily, provider, tv_symbol, market, ticker, removed, mode = st.session_state["analysis_result"]
+# Fill this container after calculation so the period control sits directly above the chart.
+summary = st.container()
+timeframe = st.radio("차트 주기", ["일봉", "주봉"], horizontal=True,
+                     key="chart_timeframe", label_visibility="collapsed")
 try:
     frame = indicators(resample_bars(daily, market, timeframe))
 except ValueError as error:
@@ -63,21 +74,28 @@ except ValueError as error:
 period = "일" if timeframe == "일봉" else "주"
 last, prev = frame.iloc[-1], frame.iloc[-2]
 signal = assess(frame)
-st.subheader("가상 데이터 체험" if tv_symbol is None else f"{market} · {ticker.upper()}")
-st.caption(f"데이터: {provider} | 마지막 분석 {timeframe}: {frame.index[-1]:%Y-%m-%d} | {len(frame)}개 {timeframe}")
-if removed:
-    st.caption(f"당일 장중·미래 데이터 {removed}개는 분석에서 제외했습니다.")
-st.caption("당일 일봉은 한국 16:00 / 미국 동부 17:00 이후에만 포함합니다. 제공처 지연·휴장·반일장은 별도로 확인하세요. 실시간 알림이 아니라 실행 시점의 마지막 일봉 분석입니다.")
-if timeframe == "주봉":
-    st.caption("주봉은 월~금 일봉을 합산하고 금요일을 날짜로 표시합니다. 해당 시장 금요일 마감 대기 시각 전에는 이번 주를 제외합니다. 휴일 주간도 금요일까지 기다리며 첫 불완전 주는 제외합니다.")
-if tv_symbol is None:
-    st.warning("현재 모든 수치와 신호는 설명용 가상 데이터입니다. 실제 종목의 투자 판단에 사용하지 마세요.")
+with summary:
+    st.subheader("가상 데이터 체험" if tv_symbol is None else f"{market} · {ticker.upper()}")
+    st.caption(f"{provider} · {timeframe} · 마지막 완료 봉 {frame.index[-1]:%Y-%m-%d} · {len(frame):,}개 봉")
+    if tv_symbol is None:
+        st.warning("현재 모든 수치와 신호는 설명용 가상 데이터입니다. 실제 종목의 투자 판단에 사용하지 마세요.")
+    notify = st.error if signal["level"] == "위험" else st.warning if signal["level"] == "주의" else st.info
+    notify(f"매도 검토 경고: {signal['level']} · {timeframe} MACD(19,39,9)")
+    if bool(last.MACD19SellSignal):
+        st.warning(f"▼ 새 매도 주의 시그널 · {frame.index[-1]:%Y-%m-%d}: MACD 0선 상향 돌파 후 양수 구간에서 오실레이터가 음수로 전환했습니다.")
 
-notify = st.error if signal["level"] == "위험" else st.warning if signal["level"] == "주의" else st.info
-notify(f"매도 검토 경고: {signal['level']} · {timeframe} MACD(19,39,9)")
+st.iframe(chart_html(frame, timeframe, bins), height=1290)
+st.caption("▼ 매도 주의 시그널 · 우측 VRVP는 표시 구간의 OHLCV로 추정한 거래량 분포이며 노란 막대는 추정 POC입니다.")
 sell_events = frame.loc[frame.MACD19SellSignal]
-if bool(last.MACD19SellSignal):
-    st.warning(f"▼ 새 매도 주의 시그널 · {frame.index[-1]:%Y-%m-%d}: MACD 0선 상향 돌파 후 양수 구간에서 오실레이터가 음수로 전환했습니다.")
+with st.expander("차트 조작·데이터 안내"):
+    st.write("차트 바로 위에서 일봉·주봉을 선택하세요. 최근 60봉·180봉·전체 버튼으로 범위를 바꿀 수 있습니다. 이동·확대·추세선·사각형·지우기·PNG 저장 도구를 제공합니다. 휠로 확대하고, 기본 보기로 최근 60봉에 돌아옵니다.")
+    st.write("십자선을 움직이면 모든 패널의 같은 날짜와 OHLC·지표 수치를 함께 확인할 수 있습니다. MA 버튼으로 이동평균선을 숨기거나 표시합니다. MACD 막대는 양수/음수와 직전 봉 대비 증가/감소를 색으로 구분합니다.")
+    st.write("분홍색 ▼: MACD(19,39,9) 0선 상향 돌파 후 양수 유지 중 오실레이터(MACD−시그널선)가 음수로 바뀐 봉. 가격·MACD 패널에 함께 표시합니다.")
+    if removed:
+        st.caption(f"당일 장중·미래 데이터 {removed}개는 분석에서 제외했습니다.")
+    st.caption("당일 일봉은 한국 16:00 / 미국 동부 17:00 이후에만 포함합니다. 제공처 지연·휴장·반일장은 별도로 확인하세요. 실시간 알림이 아니라 실행 시점의 마지막 완료 봉 분석입니다.")
+    if timeframe == "주봉":
+        st.caption("주봉은 월~금 일봉을 합산하고 금요일을 날짜로 표시합니다. 해당 시장 금요일 마감 대기 시각 전에는 이번 주를 제외합니다. 휴일 주간도 금요일까지 기다리며 첫 불완전 주는 제외합니다.")
 with st.expander("경고 근거 보기"):
     for reason in signal["reasons"]:
         st.write("• " + reason)
@@ -88,11 +106,6 @@ columns[1].metric("MACD (19,39)", f"{last.MACD:,.4f}", f"{last.MACD - prev.MACD:
 columns[2].metric("시그널 (9)", f"{last.Signal:,.4f}")
 columns[3].metric("직전 20봉 평균 대비 거래량", "계산 불가" if pd.isna(last.VolumeRatio) else f"{last.VolumeRatio:.2f}배")
 
-st.subheader(f"{timeframe} 종합 차트")
-st.caption("기본 최근 60봉 · 드래그로 이동 · 휠/도구막대로 확대 · 더블클릭 초기화 · 선/사각형 그리기 · 이미지 저장. 모든 지표의 시간축이 함께 움직입니다.")
-st.caption("우측 VRVP는 표시 구간의 봉 데이터로 추정한 거래량 분포입니다. 노란 막대는 추정 POC입니다.")
-st.caption("분홍색 ▼: MACD(19,39,9) 0선 상향 돌파 후 양수 유지 중 오실레이터(MACD−시그널선)가 음수로 바뀐 봉. 가격·MACD 패널에 함께 표시합니다.")
-st.iframe(chart_html(frame, timeframe, bins), height=1490)
 with st.expander(f"오실레이터 음전환 시그널 내역 · {len(sell_events)}회"):
     if sell_events.empty:
         st.write("조회한 데이터에서 해당 조건이 발생하지 않았습니다.")

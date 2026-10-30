@@ -56,7 +56,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(len(app.metric), 7)
         self.assertNotEqual(app.metric[1].value, daily_macd)
-        self.assertTrue(any("주봉 종합" in v.value for v in app.subheader))
+        self.assertTrue(any("주봉 · 마지막 완료 봉" in v.value for v in app.caption))
         self.assertIn('MACD 6', app.get('iframe')[0].proto.srcdoc)
 
 

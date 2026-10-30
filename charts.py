@@ -9,8 +9,8 @@ def chart_html(frame, timeframe, bins=32):
     x = list(range(len(frame)))
     dates = frame.index.strftime('%Y-%m-%d').tolist()
     fig = make_subplots(rows=6, cols=2, shared_xaxes=True, shared_yaxes=True,
-                        column_widths=[.86, .14], row_heights=[.42, .08, .15, .15, .10, .10],
-                        horizontal_spacing=.065, vertical_spacing=.042,
+                        column_widths=[.88, .12], row_heights=[.46, .07, .14, .14, .10, .09],
+                        horizontal_spacing=.075, vertical_spacing=.032,
                         specs=[[{}, {}], [{}, None], [{}, None], [{}, None], [{}, None], [{}, None]])
     colors = ['#26a69a' if c >= o else '#ef5350' for c, o in zip(frame.Close, frame.Open)]
     fig.add_trace(go.Candlestick(x=x, open=frame.Open, high=frame.High, low=frame.Low,
@@ -26,13 +26,21 @@ def chart_html(frame, timeframe, bins=32):
                         marker_color='#475569', hovertemplate='가격 %{y:.2f}<br>추정 거래량 %{x:,.0f}<extra></extra>'), row=1, col=2)
     fig.add_trace(go.Bar(x=x, y=frame.Volume, name='거래량', marker_color=colors, customdata=dates,
                         hovertemplate='%{customdata}<br>거래량 %{y:,.0f}<extra></extra>'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=x, y=frame.VolumeAvg20, name='직전 20봉 평균 거래량',
+                            line=dict(color='#e2b45d', width=1.2), customdata=dates,
+                            hovertemplate='%{customdata}<br>직전 20봉 평균 %{y:,.0f}<extra></extra>'), row=2, col=1)
     for row, names, label in [(3, ('MACD6', 'Signal6', 'Histogram6'), '6,19,9'),
                                (4, ('MACD', 'Signal', 'Histogram'), '19,39,9')]:
         for name, color in zip(names[:2], ['#38bdf8', '#fb923c']):
             fig.add_trace(go.Scatter(x=x, y=frame[name], name=f'{name} ({label})', line=dict(color=color, width=2),
                                     customdata=dates, hovertemplate='%{customdata}<br>%{y:.4f}<extra>%{fullData.name}</extra>'), row=row, col=1)
-        fig.add_trace(go.Bar(x=x, y=frame[names[2]], name=f'Histogram ({label})',
-                            marker_color=['#26a69a' if v >= 0 else '#ef5350' for v in frame[names[2]]]), row=row, col=1)
+        histogram = frame[names[2]]
+        histogram_colors = [('#26a69a' if v >= prev else '#b2dfdb') if v >= 0
+                            else ('#ef5350' if v < prev else '#ef9a9a')
+                            for v, prev in zip(histogram, histogram.shift(1))]
+        fig.add_trace(go.Bar(x=x, y=histogram, name=f'Histogram ({label})',
+                            marker_color=histogram_colors, customdata=dates,
+                            hovertemplate='%{customdata}<br>오실레이터 %{y:.4f}<extra></extra>'), row=row, col=1)
     for row, name, color in [(5, 'RSI', '#c084fc'), (6, 'OBV', '#fbbf24')]:
         fig.add_trace(go.Scatter(x=x, y=frame[name], name=name, line=dict(color=color, width=2), customdata=dates,
                                 hovertemplate='%{customdata}<br>'+name+': %{y:,.2f}<extra></extra>'), row=row, col=1)
@@ -53,12 +61,12 @@ def chart_html(frame, timeframe, bins=32):
     ticks = list(range(0, len(frame), max(1, len(frame) // 15)))
     for row in range(1, 7):
         fig.update_xaxes(range=[start-.5, len(frame)-.5], tickvals=ticks, ticktext=[dates[i] for i in ticks],
-                         showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1,
+                         showspikes=False,
                          showgrid=True, gridcolor='#242b38', row=row, col=1)
     for row, title in [(1, '가격'), (2, '거래량'), (3, 'MACD 6·19·9'), (4, 'MACD 19·39·9'), (5, 'RSI 14'), (6, 'OBV')]:
         fig.update_yaxes(title_text=None, side='right', tickfont=dict(size=12, color='#cbd5e1'),
                          nticks=5, gridcolor='#242b38', fixedrange=False,
-                         showspikes=True, spikemode='across', spikesnap='cursor', row=row, col=1)
+                         showspikes=False, zerolinecolor='#475569', row=row, col=1)
     for row, title in [(1, f'{timeframe}  ·  MA20 / MA60 / MA200'), (2, '거래량'),
                        (3, 'MACD 6 · 19 · 9'), (4, 'MACD 19 · 39 · 9'), (5, 'RSI 14'), (6, 'OBV')]:
         axis = fig.layout['yaxis' if row == 1 else f'yaxis{row+1}']
@@ -75,12 +83,20 @@ def chart_html(frame, timeframe, bins=32):
     fig.add_hrect(y0=30, y1=70, fillcolor='#a78bfa', opacity=.08, line_width=0, row=5,col=1)
     fig.update_yaxes(range=[0, 100], tickvals=[30,50,70], row=5, col=1)
     fig.update_yaxes(showticklabels=False, row=1, col=2)
+    last_color = '#26a69a' if frame.Close.iloc[-1] >= frame.Close.iloc[-2] else '#ef5350'
+    fig.add_shape(type='line', xref='x domain', x0=0, x1=1, yref='y',
+                  y0=float(frame.Close.iloc[-1]), y1=float(frame.Close.iloc[-1]),
+                  line=dict(color=last_color, width=1, dash='dot'), editable=False)
+    fig.add_annotation(x=1, xref='x domain', y=float(frame.Close.iloc[-1]), yref='y',
+                       text=f'{frame.Close.iloc[-1]:,.2f}', showarrow=False, xanchor='left',
+                       bgcolor=last_color, borderpad=4, font=dict(color='white', size=12),
+                       name='last-close')
     # Shared axes normally hide labels on upper panes. Keep dates directly below price.
     fig.update_xaxes(showticklabels=True, side='bottom', ticks='outside',
                      tickfont=dict(size=11), tickangle=0, row=1, col=1)
     fig.update_xaxes(title_text=None, showticklabels=False, row=1, col=2)
-    fig.update_layout(height=1330, template='plotly_dark', paper_bgcolor='#131722', plot_bgcolor='#131722',
-                      margin=dict(l=16,r=12,t=40,b=36), dragmode='pan', hovermode='x',
+    fig.update_layout(height=1100, template='plotly_dark', paper_bgcolor='#131722', plot_bgcolor='#131722',
+                      margin=dict(l=12,r=12,t=32,b=30), dragmode='pan', hovermode='closest',
                       xaxis_rangeslider_visible=False, showlegend=False, font=dict(family='Arial, sans-serif',size=12,color='#cbd5e1'),
                       hoverlabel=dict(bgcolor='#222b3b',font_size=13),
                       newshape=dict(line_color='#eab308'), uirevision='chart')
@@ -90,10 +106,14 @@ const gd = document.getElementById('analysis-chart');
 const records = RECORDS;
 const ohlc = OHLC;
 const series = SERIES;
+const averages = AVERAGES;
 const dates = DATES;
 const binCount = BINS;
 const profileIndex = PROFILE;
 let busy = false;
+let averagesVisible = true;
+const number = (n, digits=2) => n===null || !Number.isFinite(n) ? '—' :
+    Number(n).toLocaleString('ko-KR',{maximumFractionDigits:digits});
 function showCandle(index) {
     const i=Math.min(ohlc.length-1,Math.max(0,Math.round(index))), row=ohlc[i];
     const f=n=>Number(n).toLocaleString(undefined,{maximumFractionDigits:2});
@@ -101,10 +121,62 @@ function showCandle(index) {
     const readout=document.getElementById('candle-readout');
     readout.textContent=`${dates[i]}   시 ${f(row[0])}   고 ${f(row[1])}   저 ${f(row[2])}   종 ${f(row[3])}   ${change>=0?'+':''}${change.toFixed(2)}%   거래량 ${f(records[i][2])}`;
     readout.style.color=change>=0?'#5dd6be':'#ff858d';
+    const values=series[i];
+    document.getElementById('indicator-readout').textContent=
+        `MACD 6·19·9  ${number(values[1],4)} / ${number(values[2],4)} / ${number(values[3],4)}     ·     MACD 19·39·9  ${number(values[4],4)} / ${number(values[5],4)} / ${number(values[6],4)}     ·     RSI ${number(values[8])}     ·     OBV ${number(values[7],0)}`;
 }
 gd.on('plotly_hover',event=>{if(event.points.length && event.points[0].curveNumber!==profileIndex) showCandle(event.points[0].x);});
 gd.on('plotly_unhover',()=>showCandle(records.length-1));
 showCandle(records.length-1);
+// A DOM overlay keeps the cursor aligned across every pane without a Plotly redraw.
+gd.style.position='relative';
+for (const id of ['cross-v','cross-h','cross-date','cross-value']) {
+    const node=document.createElement('div'); node.id=id; node.className='crosshair'; gd.appendChild(node);
+}
+function hideCrosshair() {
+    gd.querySelectorAll('.crosshair').forEach(node=>node.style.display='none');
+}
+let cursorFrame;
+gd.addEventListener('pointermove',event=>{
+    cancelAnimationFrame(cursorFrame);
+    cursorFrame=requestAnimationFrame(()=>{
+        const bounds=gd.getBoundingClientRect(), px=event.clientX-bounds.left, py=event.clientY-bounds.top;
+        const layout=gd._fullLayout, axis=layout.xaxis;
+        const pane=['yaxis','yaxis3','yaxis4','yaxis5','yaxis6','yaxis7']
+            .map(name=>layout[name]).find(a=>py>=a._offset && py<=a._offset+a._length);
+        if (!pane || px<axis._offset || px>axis._offset+axis._length) { hideCrosshair(); return; }
+        const index=Math.round(axis.p2l(px-axis._offset));
+        if(index<0 || index>=records.length) { hideCrosshair(); return; }
+        showCandle(index);
+        const x=axis._offset+axis.l2p(index);
+        const set=(id,style,text)=>{const node=document.getElementById(id);Object.assign(node.style,{display:'block',...style});if(text!==undefined)node.textContent=text;};
+        set('cross-v',{left:x+'px',top:layout._size.t+'px',height:layout._size.h+'px'});
+        set('cross-h',{left:axis._offset+'px',top:py+'px',width:axis._length+'px'});
+        set('cross-date',{left:Math.max(50,Math.min(gd.clientWidth-60,x))+'px',top:(layout.yaxis._offset+layout.yaxis._length+3)+'px'},dates[index]);
+        set('cross-value',{left:(axis._offset+axis._length+2)+'px',top:py+'px'},number(pane.p2l(py-pane._offset)));
+    });
+});
+gd.addEventListener('pointerleave',()=>{cancelAnimationFrame(cursorFrame);hideCrosshair();showCandle(records.length-1);});
+document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>{
+    Plotly.relayout(gd,{dragmode:button.dataset.mode});
+}));
+function syncTools() {
+    document.querySelectorAll('[data-mode]').forEach(button=>button.setAttribute('aria-pressed',String(gd.layout.dragmode===button.dataset.mode)));
+}
+gd.on('plotly_relayout',syncTools);
+syncTools();
+document.getElementById('reset-view').addEventListener('click',()=>{
+    hideCrosshair();
+    Plotly.relayout(gd,{'xaxis.range':[Math.max(-.5,records.length-60-.5),records.length-.5],dragmode:'pan'});
+});
+document.getElementById('toggle-ma').addEventListener('click',event=>{
+    averagesVisible=!averagesVisible;
+    event.currentTarget.setAttribute('aria-pressed',String(averagesVisible));
+    Plotly.restyle(gd,{visible:averagesVisible},[1,2,3]).then(()=>updateProfile(gd.layout.xaxis.range));
+});
+document.getElementById('save-image').addEventListener('click',()=>{
+    Plotly.downloadImage(gd,{format:'png',filename:'chart-analysis',scale:2});
+});
 document.querySelectorAll('#range-toolbar button').forEach(button => {
     button.addEventListener('click', () => {
         const count = button.dataset.count === 'all' ? records.length : Number(button.dataset.count);
@@ -139,10 +211,19 @@ function updateProfile(range) {
     window.__volumeProfile = {first:lo,last:hi,volumes,centers,total:visible.reduce((sum,r)=>sum+r[2],0),poc:centers[poc]};
     document.getElementById('profile-status').textContent = `표시 범위: ${dates[lo]} ~ ${dates[hi]} · ${visible.length}개 봉 · 추정 POC: ${poc<0?'거래량 없음':centers[poc].toFixed(2)}`;
     Plotly.restyle(gd, {x:[volumes], y:[centers], width:[step*.94], 'marker.color':[volumes.map((_,i)=>i===poc?'#fbbf24':'#475569')]}, [profileIndex]);
-    const pad=(max-min)*.04;
+    let priceMin=min, priceMax=max;
+    if(averagesVisible) {
+        for(const row of averages.slice(lo,hi+1)) for(const value of row) {
+            if(value!==null && Number.isFinite(value)) {priceMin=Math.min(priceMin,value);priceMax=Math.max(priceMax,value);}
+        }
+    }
+    const pad=(priceMax-priceMin)*.05;
     const ticks=[]; for(let i=lo;i<=hi;i+=Math.max(1,Math.ceil((hi-lo+1)/Math.max(3,Math.floor(gd.clientWidth/130))))) ticks.push(i);
-    const update={'yaxis.range':[min-pad,max+pad], 'xaxis2.autorange':true};
-    for (const [axis, columns] of [['yaxis3',[0]],['yaxis4',[1,2,3]],['yaxis5',[4,5,6]],['yaxis7',[7]]]) {
+    const update={'yaxis.range':[priceMin-pad,priceMax+pad], 'xaxis2.autorange':true};
+    const lastClose=ohlc[ohlc.length-1][3];
+    const lastLabel=gd.layout.annotations.findIndex(a=>a.name==='last-close');
+    update[`annotations[${lastLabel}].visible`]=lastClose>=priceMin-pad && lastClose<=priceMax+pad;
+    for (const [axis, columns] of [['yaxis3',[0,9]],['yaxis4',[1,2,3]],['yaxis5',[4,5,6]],['yaxis7',[7]]]) {
         const values = series.slice(lo,hi+1).flatMap(row=>columns.map(c=>row[c])).filter(v=>v!==null && Number.isFinite(v));
         if (!values.length) continue;
         let bottom=values.reduce((a,b)=>Math.min(a,b),Infinity), top=values.reduce((a,b)=>Math.max(a,b),-Infinity);
@@ -151,6 +232,10 @@ function updateProfile(range) {
         update[axis+'.range']=[bottom-padding,top+padding];
     }
     for (const axis of ['xaxis','xaxis3','xaxis4','xaxis5','xaxis6','xaxis7']) {
+        // Set the matched root axis too; otherwise Plotly can restore its old range
+        // when another pane is relaid out (e.g. after switching from all to 60 bars).
+        update[axis+'.range']=range;
+        update[axis+'.autorange']=false;
         update[axis+'.tickvals']=ticks; update[axis+'.ticktext']=ticks.map(i=>dates[i]);
     }
     busy=true;
@@ -160,6 +245,7 @@ gd.on('plotly_relayout', event => {
     if (busy) return;
     const changed=Object.keys(event).find(k=>/^xaxis(?!2[.])\d*[.](range|autorange)/.test(k));
     if (!changed) return;
+    hideCrosshair();
     const axis=changed.split('.')[0];
     let range = event[axis+'.autorange'] ? [-.5, records.length-.5] : event[axis+'.range'];
     if (!range && event[axis+'.range[0]']!==undefined) range=[event[axis+'.range[0]'],event[axis+'.range[1]']];
@@ -173,26 +259,43 @@ window.addEventListener('resize',()=>{
 });
 updateProfile([START, END]);
 '''
-    values = frame[['Volume','MACD6','Signal6','Histogram6','MACD','Signal','Histogram','OBV']].to_json(orient='values')
+    values = frame[['Volume','MACD6','Signal6','Histogram6','MACD','Signal','Histogram','OBV','RSI','VolumeAvg20']].to_json(orient='values')
     script = (script.replace('RECORDS', json.dumps(records)).replace('OHLC', frame[['Open','High','Low','Close']].to_json(orient='values')).replace('SERIES',values).replace('DATES',json.dumps(dates))
+              .replace('AVERAGES', frame[['MA20','MA60','MA200']].to_json(orient='values'))
               .replace('BINS', str(int(bins))).replace('PROFILE',str(profile_index))
               .replace('START',str(start-.5)).replace('END',str(len(frame)-.5)))
     html = fig.to_html(full_html=True, include_plotlyjs=True, div_id='analysis-chart', post_script=script,
-                       config={'scrollZoom':True,'displaylogo':False,'responsive':True,'displayModeBar':True,
+                       config={'scrollZoom':True,'displaylogo':False,'responsive':True,'displayModeBar':False,
                                'modeBarButtonsToAdd':['drawline','drawrect','eraseshape'], 'toImageButtonOptions':{'filename':'chart-analysis'}})
     toolbar = '''<style>
-    #range-toolbar {display:flex;justify-content:center;gap:6px;flex-wrap:wrap;padding:10px;border-bottom:1px solid #2a3140;}
-    .modebar {background:#1e2533!important;border-radius:4px;}
-    .modebar-btn path {fill:#b6c2d5!important;}
-    .modebar-btn:hover path {fill:#fff!important;}
-    #candle-readout {padding:10px 16px 4px;font-size:13px;line-height:1.8;font-variant-numeric:tabular-nums;}
-    #range-toolbar button {background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:7px 16px;cursor:pointer;font-size:14px;}
-    #range-toolbar button:hover {background:#334155;}
-    #range-toolbar button[aria-pressed="true"] {background:#2563eb;border-color:#60a5fa;color:white;}
-    #range-toolbar button:focus-visible {outline:2px solid #fbbf24;outline-offset:2px;}
-    </style><nav id="range-toolbar" aria-label="차트 표시 범위">
+    * {box-sizing:border-box;}
+    #chart-toolbar {display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;padding:6px 10px;background:#171c28;border-bottom:1px solid #2a3140;}
+    #range-toolbar,#tools {display:flex;gap:3px;flex-wrap:wrap;}
+    #candle-readout {padding:8px 14px 2px;font-size:13px;line-height:1.7;font-variant-numeric:tabular-nums;min-height:32px;}
+    #indicator-readout {padding:2px 14px;font-size:11px;color:#c4b5fd;line-height:1.7;min-height:23px;font-variant-numeric:tabular-nums;}
+    #chart-toolbar button {background:transparent;color:#cbd5e1;border:1px solid transparent;border-radius:4px;padding:6px 9px;cursor:pointer;font-size:12px;}
+    #chart-toolbar button:hover {background:#293346;color:white;}
+    #chart-toolbar button[aria-pressed="true"] {background:#24385c;color:#93bbff;border-color:#3b5989;}
+    #chart-toolbar button:focus-visible {outline:2px solid #fbbf24;outline-offset:2px;}
+    .crosshair {position:absolute;pointer-events:none;z-index:20;display:none;}
+    #cross-v {border-left:1px dashed #959eaf;}
+    #cross-h {border-top:1px dashed #959eaf;}
+    #cross-date,#cross-value {background:#364155;color:#fff;padding:3px 5px;font-size:11px;white-space:nowrap;border-radius:2px;}
+    #cross-date {transform:translateX(-50%);}
+    #cross-value {transform:translateY(-50%);}
+    @media(max-width:650px) {#chart-toolbar{justify-content:flex-start;}#chart-toolbar button{padding:6px;}#indicator-readout{font-size:10px;}}
+    </style><div id="chart-toolbar"><nav id="range-toolbar" aria-label="차트 표시 범위">
     <button type="button" data-count="60" aria-pressed="true">최근 60봉</button>
     <button type="button" data-count="180" aria-pressed="false">최근 180봉</button>
     <button type="button" data-count="all" aria-pressed="false">전체</button>
-    </nav><div id="candle-readout" aria-live="off"></div><div id="profile-status" style="padding:4px 16px 10px;font-size:12px;color:#a8b4c6"></div>'''
+    </nav><nav id="tools" aria-label="차트 조작 도구">
+    <button type="button" data-mode="pan" aria-pressed="true" title="드래그로 차트 이동">이동</button>
+    <button type="button" data-mode="zoom" aria-pressed="false" title="드래그한 구간 확대">확대</button>
+    <button type="button" data-mode="drawline" aria-pressed="false">추세선</button>
+    <button type="button" data-mode="drawrect" aria-pressed="false">사각형</button>
+    <button type="button" data-mode="eraseshape" aria-pressed="false" title="그린 도형을 클릭해 지우기">지우기</button>
+    <button type="button" id="toggle-ma" aria-pressed="true" title="이동평균선 표시 전환">MA</button>
+    <button type="button" id="reset-view" title="최근 60봉과 자동 눈금으로 돌아가기">기본 보기</button>
+    <button type="button" id="save-image" title="차트를 PNG 이미지로 저장">PNG 저장</button>
+    </nav></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="profile-status" style="padding:3px 14px 6px;font-size:11px;color:#8e9bb0"></div>'''
     return html.replace('<body>', '<body style="margin:0;background:#131722;color:#cbd5e1;font-family:sans-serif">'+toolbar)
