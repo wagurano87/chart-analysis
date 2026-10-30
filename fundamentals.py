@@ -24,14 +24,33 @@ def positive_number(value):
         return None
 
 
+class UnsupportedFinancials(ValueError):
+    """A fund does not publish company operating results."""
+
+
 def fetch_fundamentals(symbol):
     import yfinance as yf
     ticker = yf.Ticker(symbol)
-    financials = quarterly_metrics(ticker.quarterly_income_stmt)
     try:
-        info = ticker.get_info()
+        info = ticker.get_info() or {}
     except Exception:
         info = {}
+    kind = str(info.get('quoteType', '')).upper()
+    if kind in {'ETF', 'MUTUALFUND', 'INDEX', 'CURRENCY', 'CRYPTOCURRENCY', 'FUTURE'}:
+        name = info.get('longName') or info.get('shortName') or symbol
+        raise UnsupportedFinancials(
+            f'{symbol} · {name} ({kind})은 기업 분기 손익계산서 분석 대상이 아닙니다. '
+            '매출액·영업이익·영업이익률·기업 PEG를 표시할 수 없습니다. '
+            '개별 기업 종목을 선택하면 분기 실적을 조회할 수 있습니다. 가격·거래량 차트는 계속 사용할 수 있습니다.')
+    try:
+        statement = ticker.quarterly_income_stmt
+    except Exception as error:
+        raise RuntimeError('Yahoo Finance 분기 재무제표 요청에 실패했습니다. 일시적인 요청 제한 또는 연결 오류일 수 있습니다.') from error
+    if statement.empty:
+        raise ValueError(f'Yahoo Finance가 {symbol}의 분기 손익계산서를 반환하지 않았습니다. '
+                         '시세와 재무제표의 지원 범위는 다릅니다. ETF·펀드 여부와 종목 코드를 확인하세요. '
+                         '개별 기업이라면 제공처 미지원 또는 일시적인 요청 제한일 수 있습니다.')
+    financials = quarterly_metrics(statement)
     return financials, info.get('financialCurrency'), positive_number(info.get('trailingPegRatio'))
 
 
@@ -41,7 +60,7 @@ def render_fundamentals(symbol, mode):
     from datetime import datetime, timezone
 
     st.subheader('기본적 분석 · 분기 실적')
-    st.caption('최근 최대 8분기의 보고 실적 · 결산 종료일 기준 · 시세의 일봉/주봉 선택과 독립적으로 표시됩니다.')
+    st.caption('출처: Yahoo Finance (yfinance) · 최근 최대 8분기의 보고 실적 · 결산 종료일 기준 · 시세의 일봉/주봉 선택과 독립적으로 표시됩니다.')
     if mode != '온라인 시세':
         st.info('실제 종목의 기본적 분석은 온라인 시세로 분석한 후 사용할 수 있습니다. 가격 CSV·가상 데이터에는 재무제표가 포함되어 있지 않습니다.')
         return
@@ -52,12 +71,19 @@ def render_fundamentals(symbol, mode):
 
     # Keep technical charts usable when the financial provider is slow or unavailable.
     if st.button('분기 재무제표 불러오기', key='load_financials'):
+        load.clear(symbol)
         st.session_state['financial_symbol'] = symbol
     if st.session_state.get('financial_symbol') != symbol:
         return
     try:
         with st.spinner('분기 실적을 불러오는 중입니다…'):
             frame, currency, peg, fetched = load(symbol)
+    except UnsupportedFinancials as error:
+        st.info(str(error))
+        return
+    except (ValueError, RuntimeError) as error:
+        st.warning(str(error))
+        return
     except Exception:
         st.warning('재무 데이터를 불러오지 못했습니다. 제공처의 지원 여부나 일시적인 연결 문제일 수 있습니다. 잠시 후 다시 시도하세요.')
         return

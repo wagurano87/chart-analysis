@@ -33,3 +33,24 @@ class FinancialTests(unittest.TestCase):
             app.button(key='load_financials').click().run()
             self.assertEqual(len(app.exception),0)
             self.assertEqual(len(app.get('plotly_chart')),4)
+
+    def test_etf_has_specific_explanation_without_income_request(self):
+        from unittest.mock import patch, PropertyMock
+        from fundamentals import fetch_fundamentals, UnsupportedFinancials
+        with patch('yfinance.Ticker') as factory:
+            ticker=factory.return_value
+            ticker.get_info.return_value={'quoteType':'ETF','longName':'Example International ETF'}
+            income=PropertyMock(side_effect=AssertionError('ETF income must not be requested'))
+            type(ticker).quarterly_income_stmt=income
+            with self.assertRaisesRegex(UnsupportedFinancials,'기업 분기 손익계산서'):
+                fetch_fundamentals('INTL')
+            income.assert_not_called()
+
+    def test_equity_with_missing_statement_is_distinguished(self):
+        from unittest.mock import patch
+        from fundamentals import fetch_fundamentals
+        with patch('yfinance.Ticker') as factory:
+            factory.return_value.get_info.return_value={'quoteType':'EQUITY'}
+            factory.return_value.quarterly_income_stmt=pd.DataFrame()
+            with self.assertRaisesRegex(ValueError,'반환하지 않았습니다'):
+                fetch_fundamentals('AAPL')
