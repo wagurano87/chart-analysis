@@ -126,8 +126,10 @@ function refreshMeasurements() {
         const start=Math.round(shape.x0), end=Math.round(shape.x1);
         if(!dates[start] || !dates[end] || !shape.y0) return;
         const change=(shape.y1/shape.y0-1)*100;
+        const segment=records.slice(Math.min(start,end),Math.max(start,end)+1);
+        const high=Math.max(...segment.map(r=>r[1])), low=Math.min(...segment.map(r=>r[0]));
         annotations.push({name:'measure-'+i,x:shape.x1,y:shape.y1,xref:shape.xref,yref:shape.yref,
-            text:`${dates[start]} → ${dates[end]}<br>${change>=0?'+':''}${change.toFixed(2)}% · ${Math.abs(end-start)}봉 · ${Math.round(Math.abs(Date.parse(dates[end])-Date.parse(dates[start]))/86400000)}일`,
+            text:`${dates[start]} → ${dates[end]}<br>시작 ${number(shape.y0)} → 끝 ${number(shape.y1)}<br>구간 고가 ${number(high)} · 저가 ${number(low)}<br>${change>=0?'+':''}${change.toFixed(2)}% · ${Math.abs(end-start)}봉 · ${Math.round(Math.abs(Date.parse(dates[end])-Date.parse(dates[start]))/86400000)}일`,
             showarrow:true,arrowhead:0,ax:0,ay:change>=0?-40:40,bgcolor:'#24385c',borderpad:5,font:{color:'#fff',size:12}});
     });
     Plotly.relayout(gd,{annotations});
@@ -165,6 +167,8 @@ gd.on('plotly_relayout',event=>{
         if(measuring && gd.layout.shapes[count-1].yref==='y') {
             const shape=gd.layout.shapes[count-1];
             shape.name='measurement';
+            shape.type='rect';
+            shape.fillcolor='rgba(96,165,250,0.10)';
             shape.line={...shape.line,dash:'solid',color:'#60a5fa'};
         }
         selectShape(count-1);
@@ -289,7 +293,7 @@ function updateProfile(range) {
         Plotly.restyle(gd, {x:[[]], y:[[]]}, [profileIndex]); return;
     }
     let min = visible.reduce((v,r)=>Math.min(v,r[0]),Infinity), max = visible.reduce((v,r)=>Math.max(v,r[1]),-Infinity);
-    const visiblePeak=max;
+    const visiblePeak=max, visibleLow=min;
     if (max === min) { min -= Math.max(.01, Math.abs(min)*.001); max += Math.max(.01,Math.abs(max)*.001); }
     const step = (max-min)/binCount, volumes = new Array(binCount).fill(0);
     // With OHLCV only, approximate each candle's volume uniformly over its low/high.
@@ -304,7 +308,7 @@ function updateProfile(range) {
     const poc=volumes.some(v=>v>0) ? volumes.indexOf(Math.max(...volumes)) : -1;
     window.__volumeProfile = {first:lo,last:hi,volumes,centers,total:visible.reduce((sum,r)=>sum+r[2],0),poc:centers[poc]};
     document.getElementById('profile-status').textContent = `표시 범위: ${dates[lo]} ~ ${dates[hi]} · ${visible.length}개 봉 · 추정 POC: ${poc<0?'거래량 없음':centers[poc].toFixed(2)}`;
-    Plotly.restyle(gd, {x:[volumes], y:[centers], width:[step*.94], 'marker.color':[volumes.map((_,i)=>i===poc?'#fbbf24':'#475569')]}, [profileIndex]);
+    const profileUpdate={x:[volumes], y:[centers], width:[step*.94], 'marker.color':[volumes.map((_,i)=>i===poc?'#fbbf24':'#475569')]};
     let priceMin=min, priceMax=max;
     if(averagesVisible) {
         for(const row of averages.slice(lo,hi+1)) for(const value of row) {
@@ -318,8 +322,18 @@ function updateProfile(range) {
     const ticks=[]; for(let i=lo;i<=hi;i+=Math.max(1,Math.ceil((hi-lo+1)/Math.max(3,Math.floor(gd.clientWidth/130))))) ticks.push(i);
     const update={'yaxis.range':[priceMin-pad,priceMax+pad], 'xaxis2.autorange':true};
     const lastClose=ohlc[ohlc.length-1][3];
+    const troughIndex=lo+visible.findIndex(row=>row[0]===visibleLow);
+    const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('extreme-'));
+    for(const [name,index,price,offset] of [['high',peakIndex,visiblePeak,45],['low',troughIndex,visibleLow,-45]]) {
+        const percent=(lastClose/price-1)*100;
+        annotations.push({name:'extreme-'+name,x:index,y:price,xref:'x',yref:'y',
+            text:`${name==='high'?'최고':'최저'} ${number(price)} → 현재 ${percent>=0?'+':''}${percent.toFixed(2)}%`,
+            showarrow:true,arrowhead:2,ax:index>(lo+hi)/2?-70:70,ay:offset,
+            bgcolor:'#1e293b',borderpad:4,font:{size:11,color:name==='high'?'#fda4af':'#6ee7b7'}});
+    }
+    update.annotations=annotations;
     const lastLabel=gd.layout.annotations.findIndex(a=>a.name==='last-close');
-    update[`annotations[${lastLabel}].visible`]=lastClose>=priceMin-pad && lastClose<=priceMax+pad;
+    annotations[lastLabel].visible=lastClose>=priceMin-pad && lastClose<=priceMax+pad;
     for (const [axis, columns] of [['yaxis3',[0,9]],['yaxis4',[1,2,3]],['yaxis5',[4,5,6]],['yaxis7',[7]]]) {
         const values = series.slice(lo,hi+1).flatMap(row=>columns.map(c=>row[c])).filter(v=>v!==null && Number.isFinite(v));
         if (!values.length) continue;
@@ -331,12 +345,17 @@ function updateProfile(range) {
     for (const axis of ['xaxis','xaxis3','xaxis4','xaxis5','xaxis6','xaxis7']) {
         // Set the matched root axis too; otherwise Plotly can restore its old range
         // when another pane is relaid out (e.g. after switching from all to 60 bars).
-        update[axis+'.range']=range;
+        if(gd.layout[axis].range.some((v,i)=>v!==range[i])) update[axis+'.range']=range;
         update[axis+'.autorange']=false;
         update[axis+'.tickvals']=ticks; update[axis+'.ticktext']=ticks.map(i=>dates[i]);
     }
     busy=true;
-    Plotly.relayout(gd,update).finally(()=>{busy=false;});
+    Plotly.update(gd,profileUpdate,update,[profileIndex]).finally(()=>{busy=false;});
+}
+let profileTimer;
+function scheduleProfile(range) {
+    clearTimeout(profileTimer);
+    profileTimer=setTimeout(()=>{if(busy) scheduleProfile(range); else updateProfile(range);},140);
 }
 gd.on('plotly_relayout', event => {
     if (busy) return;
@@ -347,7 +366,7 @@ gd.on('plotly_relayout', event => {
     let range = event[axis+'.autorange'] ? [-.5, records.length-.5] : event[axis+'.range'];
     if (!range && event[axis+'.range[0]']!==undefined) range=[event[axis+'.range[0]'],event[axis+'.range[1]']];
     if (!range) range=gd.layout[axis].range;
-    updateProfile(range);
+    scheduleProfile(range);
 });
 let resizeTimer;
 window.addEventListener('resize',()=>{
