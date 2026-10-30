@@ -118,6 +118,21 @@ const protectedShapeCount = (gd.layout.shapes || []).length;
 let shapeCount = protectedShapeCount;
 let selectedShape = null;
 let deletingShape = false;
+let measuring = false;
+function refreshMeasurements() {
+    const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('measure-'));
+    (gd.layout.shapes || []).forEach((shape,i)=>{
+        if(shape.name!=='measurement') return;
+        const start=Math.round(shape.x0), end=Math.round(shape.x1);
+        if(!dates[start] || !dates[end] || !shape.y0) return;
+        const change=(shape.y1/shape.y0-1)*100;
+        annotations.push({name:'measure-'+i,x:shape.x1,y:shape.y1,xref:shape.xref,yref:shape.yref,
+            text:`${dates[start]} → ${dates[end]}<br>${change>=0?'+':''}${change.toFixed(2)}% · ${Math.abs(end-start)}봉 · ${Math.round(Math.abs(Date.parse(dates[end])-Date.parse(dates[start]))/86400000)}일`,
+            showarrow:true,arrowhead:0,ax:0,ay:change>=0?-40:40,bgcolor:'#24385c',borderpad:5,font:{color:'#fff',size:12}});
+    });
+    Plotly.relayout(gd,{annotations});
+}
+
 gd.tabIndex = 0;
 gd.setAttribute('aria-label','분석 차트. 추세선 선택 후 Delete로 삭제, Escape로 선택 해제');
 function showShapeSelection() {
@@ -147,11 +162,17 @@ gd.on('plotly_relayout',event=>{
     if(!Object.keys(event).some(key=>key==='shapes' || key.startsWith('shapes['))) return;
     const count=(gd.layout.shapes || []).length;
     if(count>shapeCount) {
+        if(measuring && gd.layout.shapes[count-1].yref==='y') {
+            const shape=gd.layout.shapes[count-1];
+            shape.name='measurement';
+            shape.line={...shape.line,dash:'solid',color:'#60a5fa'};
+        }
         selectShape(count-1);
         gd.focus({preventScroll:true});
     } else if(count<shapeCount) selectShape(null);
     shapeCount=count;
     showShapeSelection();
+    refreshMeasurements();
 });
 async function deleteSelectedShape() {
     const index=selectedShape, shapes=gd.layout.shapes || [];
@@ -223,15 +244,22 @@ gd.addEventListener('pointermove',event=>{
 });
 gd.addEventListener('pointerleave',()=>{cancelAnimationFrame(cursorFrame);hideCrosshair();showCandle(records.length-1);});
 document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>{
+    measuring=false;
     Plotly.relayout(gd,{dragmode:button.dataset.mode});
 }));
+document.getElementById('measure-tool').addEventListener('click',()=>{
+    measuring=true;
+    Plotly.relayout(gd,{dragmode:'drawline'});
+});
 function syncTools() {
-    document.querySelectorAll('[data-mode]').forEach(button=>button.setAttribute('aria-pressed',String(gd.layout.dragmode===button.dataset.mode)));
+    document.getElementById('measure-tool').setAttribute('aria-pressed',String(measuring));
+    document.querySelectorAll('[data-mode]').forEach(button=>button.setAttribute('aria-pressed',String(!measuring && gd.layout.dragmode===button.dataset.mode)));
 }
 gd.on('plotly_relayout',syncTools);
 syncTools();
 document.getElementById('reset-view').addEventListener('click',()=>{
     hideCrosshair();
+    measuring=false;
     Plotly.relayout(gd,{'xaxis.range':[Math.max(-.5,records.length-60-.5),records.length-.5],dragmode:'pan'});
 });
 document.getElementById('toggle-ma').addEventListener('click',event=>{
@@ -261,6 +289,7 @@ function updateProfile(range) {
         Plotly.restyle(gd, {x:[[]], y:[[]]}, [profileIndex]); return;
     }
     let min = visible.reduce((v,r)=>Math.min(v,r[0]),Infinity), max = visible.reduce((v,r)=>Math.max(v,r[1]),-Infinity);
+    const visiblePeak=max;
     if (max === min) { min -= Math.max(.01, Math.abs(min)*.001); max += Math.max(.01,Math.abs(max)*.001); }
     const step = (max-min)/binCount, volumes = new Array(binCount).fill(0);
     // With OHLCV only, approximate each candle's volume uniformly over its low/high.
@@ -282,6 +311,9 @@ function updateProfile(range) {
             if(value!==null && Number.isFinite(value)) {priceMin=Math.min(priceMin,value);priceMax=Math.max(priceMax,value);}
         }
     }
+    const peakIndex=lo+visible.findIndex(row=>row[1]===visiblePeak);
+    const drawdown=(ohlc[ohlc.length-1][3]/visiblePeak-1)*100;
+    document.getElementById('drawdown-status').textContent=`표시 구간 최고가 ${number(visiblePeak)} (${dates[peakIndex]}) → 마지막 완료 봉 종가 ${number(ohlc[ohlc.length-1][3])}: ${drawdown>=0?'+':''}${drawdown.toFixed(2)}% · 마지막 완료 봉 ${dates[dates.length-1]}`;
     const pad=(priceMax-priceMin)*.05;
     const ticks=[]; for(let i=lo;i<=hi;i+=Math.max(1,Math.ceil((hi-lo+1)/Math.max(3,Math.floor(gd.clientWidth/130))))) ticks.push(i);
     const update={'yaxis.range':[priceMin-pad,priceMax+pad], 'xaxis2.autorange':true};
@@ -361,11 +393,12 @@ updateProfile([START, END]);
     </nav><nav id="tools" aria-label="차트 조작 도구">
     <button type="button" data-mode="pan" aria-pressed="true" title="드래그로 차트 이동">이동</button>
     <button type="button" data-mode="zoom" aria-pressed="false" title="드래그한 구간 확대">확대</button>
+    <button type="button" id="measure-tool" aria-pressed="false" title="시작 가격에서 끝 가격으로 드래그">측정 ↗</button>
     <button type="button" data-mode="drawline" aria-pressed="false">추세선</button>
     <button type="button" data-mode="drawrect" aria-pressed="false">사각형</button>
     <button type="button" id="delete-shape" disabled title="선택한 도형 삭제 (Delete)">지우기 · Del</button>
     <button type="button" id="toggle-ma" aria-pressed="true" title="이동평균선 표시 전환">MA</button>
     <button type="button" id="reset-view" title="최근 60봉과 자동 눈금으로 돌아가기">기본 보기</button>
     <button type="button" id="save-image" title="차트를 PNG 이미지로 저장">PNG 저장</button>
-    </nav></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="drawing-status" role="status"></div><div id="profile-status" style="padding:3px 14px 6px;font-size:11px;color:#8e9bb0"></div>'''
+    </nav></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="drawing-status" role="status"></div><div id="drawdown-status" style="padding:3px 14px;font-size:12px;color:#93c5fd"></div><div id="profile-status" style="padding:3px 14px 6px;font-size:11px;color:#8e9bb0"></div>'''
     return html.replace('<body>', '<body style="margin:0;background:#131722;color:#cbd5e1;font-family:sans-serif">'+toolbar)
