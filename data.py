@@ -34,8 +34,36 @@ def fetch_prices(value, market, exchange):
             continue
         if isinstance(frame.columns, pd.MultiIndex):
             frame.columns = frame.columns.get_level_values(0)
-        return validate_prices(frame), symbol, tv_symbol
+        return prepare_online_prices(frame), symbol, tv_symbol
     raise ValueError("일봉을 받지 못했습니다. 종목코드, 제공처 장애 또는 네트워크 제한을 확인하세요. CSV 입력도 지원합니다.")
+
+
+def prepare_online_prices(frame):
+    """Tolerate float rounding only; exclude inconsistent online candles explicitly."""
+    frame = frame.copy()
+    required = ['Open', 'High', 'Low', 'Close', 'Volume']
+    if not set(required).issubset(frame.columns):
+        return validate_prices(frame)
+    frame[required] = frame[required].apply(pd.to_numeric, errors='coerce')
+    prices = frame[['Open', 'High', 'Low', 'Close']]
+    upper = prices.max(axis=1)
+    lower = prices.min(axis=1)
+    # One millionth of price (0.0001%): numerical noise, not a market tick.
+    tolerance = prices.abs().max(axis=1) * 1e-6
+    invalid = (~np.isfinite(frame[required]).all(axis=1) |
+               (prices <= 0).any(axis=1) | (frame.Volume < 0) |
+               ((upper-frame.High) > tolerance) | ((frame.Low-lower) > tolerance))
+    excluded = [str(date)[:10] for date in frame.index[invalid]]
+    frame = frame.loc[~invalid].copy()
+    if frame.empty:
+        raise ValueError('제공처에서 받은 시세에 유효한 가격 데이터가 없습니다. 잠시 후 다시 조회하세요.')
+    rounded = ((frame.High < upper.loc[frame.index]) | (frame.Low > lower.loc[frame.index])).sum()
+    frame['High'] = upper.loc[frame.index]
+    frame['Low'] = lower.loc[frame.index]
+    frame = validate_prices(frame)
+    frame.attrs['excluded_price_dates'] = excluded
+    frame.attrs['rounded_price_rows'] = int(rounded)
+    return frame
 
 
 def read_csv(file):

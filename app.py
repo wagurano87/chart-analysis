@@ -80,6 +80,13 @@ last, prev = frame.iloc[-1], frame.iloc[-2]
 signal = assess(frame)
 with summary:
     st.subheader("가상 데이터 체험" if tv_symbol is None else f"{market} · {ticker.upper()}")
+    excluded_prices = daily.attrs.get('excluded_price_dates', [])
+    if excluded_prices:
+        st.warning(f"제공처의 잘못된 가격 데이터 {len(excluded_prices)}개 봉을 제외했습니다. 누락 봉 때문에 지표가 원본과 달라질 수 있습니다.")
+        with st.expander('제외된 시세 날짜 확인'):
+            st.write(', '.join(excluded_prices))
+    if daily.attrs.get('rounded_price_rows', 0):
+        st.caption(f"수정주가 계산의 미세 오차 {daily.attrs['rounded_price_rows']}개 봉을 보정했습니다.")
     st.caption(f"{provider} · {timeframe} · 마지막 완료 봉 {frame.index[-1]:%Y-%m-%d} · {len(frame):,}개 봉")
     if tv_symbol is None:
         st.warning("현재 모든 수치와 신호는 설명용 가상 데이터입니다. 실제 종목의 투자 판단에 사용하지 마세요.")
