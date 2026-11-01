@@ -5,6 +5,7 @@ import streamlit as st
 
 from analysis import assess, completed_daily_bars, indicators, resample_bars
 from charts import chart_html
+from symbol_search import render_symbol_search
 from data import demo_prices, fetch_prices, read_csv, symbols
 
 st.set_page_config(page_title="차트 분석 · Dual MACD", layout="wide")
@@ -26,14 +27,17 @@ def load_prices(ticker, market):
     return fetch_prices(ticker, market, "NASDAQ")
 
 
+st.session_state.setdefault("analysis_ticker", "005930")
+
 with st.sidebar:
     st.header("분석 대상")
     with st.form("request"):
         mode = st.selectbox("데이터", ["온라인 시세", "CSV 업로드", "가상 데이터 체험"])
-        market = st.selectbox("시장", ["한국", "미국"])
-        ticker = st.text_input("한국 6자리 코드 / 미국 티커", "005930")
+        market = st.selectbox("시장", ["한국", "미국"], key="analysis_market")
+        ticker = st.text_input("한국 6자리 코드 / 미국 티커", key="analysis_ticker")
         uploaded = st.file_uploader("CSV: Date, Open, High, Low, Close, Volume", type="csv")
         submitted = st.form_submit_button("분석하기", type="primary")
+    render_symbol_search()
     st.caption("한국: 005930(삼성전자), 000660(SK하이닉스)\n\n미국: AAPL·NVDA(NASDAQ), IBM(NYSE)")
     bins = st.select_slider("VRVP 가격 구간 수", options=[16, 24, 32, 48, 64], value=32)
     st.caption("CSV는 일봉을 입력하세요. 주봉은 일봉에서 합산합니다.")
