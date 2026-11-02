@@ -65,7 +65,7 @@ def chart_html(frame, timeframe, bins=32):
                          showgrid=True, gridcolor='#242b38', row=row, col=1)
     for row, title in [(1, '가격'), (2, '거래량'), (3, 'MACD 6·19·9'), (4, 'MACD 19·39·9'), (5, 'RSI 14'), (6, 'OBV')]:
         fig.update_yaxes(title_text=None, side='right', tickfont=dict(size=12, color='#cbd5e1'),
-                         nticks=5, gridcolor='#242b38', fixedrange=False,
+                         nticks=5, gridcolor='#242b38', fixedrange=True,
                          showspikes=False, zerolinecolor='#475569', row=row, col=1)
     for row, title in [(1, f'{timeframe}  ·  MA20 / MA60 / MA200'), (2, '거래량'),
                        (3, 'MACD 6 · 19 · 9'), (4, 'MACD 19 · 39 · 9'), (5, 'RSI 14'), (6, 'OBV')]:
@@ -114,6 +114,7 @@ const binCount = BINS;
 const profileIndex = PROFILE;
 let busy = false;
 let averagesVisible = true;
+let fitNextRange = false;
 const protectedShapeCount = (gd.layout.shapes || []).length;
 let shapeCount = protectedShapeCount;
 let selectedShape = null;
@@ -264,6 +265,7 @@ syncTools();
 document.getElementById('reset-view').addEventListener('click',()=>{
     hideCrosshair();
     measuring=false;
+    fitNextRange=true;
     Plotly.relayout(gd,{'xaxis.range':[Math.max(-.5,records.length-60-.5),records.length-.5],dragmode:'pan'});
 });
 document.getElementById('toggle-ma').addEventListener('click',event=>{
@@ -276,11 +278,13 @@ document.getElementById('save-image').addEventListener('click',()=>{
 });
 document.querySelectorAll('#range-toolbar button').forEach(button => {
     button.addEventListener('click', () => {
+        fitNextRange=true;
         const count = button.dataset.count === 'all' ? records.length : Number(button.dataset.count);
         Plotly.relayout(gd, {'xaxis.range':[Math.max(-.5,records.length-count-.5),records.length-.5]});
     });
 });
-function updateProfile(range) {
+document.getElementById('fit-price').addEventListener('click',()=>updateProfile(gd.layout.xaxis.range,true));
+function updateProfile(range, fitPrice=true) {
     const lo = Math.max(0, Math.ceil(Number(range[0]))), hi = Math.min(records.length-1, Math.floor(Number(range[1])));
     const visible = records.slice(lo, hi+1);
     document.querySelectorAll('#range-toolbar button').forEach(button => {
@@ -320,7 +324,8 @@ function updateProfile(range) {
     document.getElementById('drawdown-status').textContent=`표시 구간 최고가 ${number(visiblePeak)} (${dates[peakIndex]}) → 마지막 완료 봉 종가 ${number(ohlc[ohlc.length-1][3])}: ${drawdown>=0?'+':''}${drawdown.toFixed(2)}% · 마지막 완료 봉 ${dates[dates.length-1]}`;
     const pad=(priceMax-priceMin)*.05;
     const ticks=[]; for(let i=lo;i<=hi;i+=Math.max(1,Math.ceil((hi-lo+1)/Math.max(3,Math.floor(gd.clientWidth/130))))) ticks.push(i);
-    const update={'yaxis.range':[priceMin-pad,priceMax+pad], 'xaxis2.autorange':true};
+    const update={'xaxis2.autorange':true};
+    if(fitPrice) update['yaxis.range']=[priceMin-pad,priceMax+pad];
     const lastClose=ohlc[ohlc.length-1][3];
     const troughIndex=lo+visible.findIndex(row=>row[0]===visibleLow);
     const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('extreme-'));
@@ -333,14 +338,15 @@ function updateProfile(range) {
     }
     update.annotations=annotations;
     const lastLabel=gd.layout.annotations.findIndex(a=>a.name==='last-close');
-    annotations[lastLabel].visible=lastClose>=priceMin-pad && lastClose<=priceMax+pad;
+    const priceRange=fitPrice?[priceMin-pad,priceMax+pad]:gd.layout.yaxis.range;
+    annotations[lastLabel].visible=lastClose>=priceRange[0] && lastClose<=priceRange[1];
     for (const [axis, columns] of [['yaxis3',[0,9]],['yaxis4',[1,2,3]],['yaxis5',[4,5,6]],['yaxis7',[7]]]) {
         const values = series.slice(lo,hi+1).flatMap(row=>columns.map(c=>row[c])).filter(v=>v!==null && Number.isFinite(v));
         if (!values.length) continue;
         let bottom=values.reduce((a,b)=>Math.min(a,b),Infinity), top=values.reduce((a,b)=>Math.max(a,b),-Infinity);
         if (axis!=='yaxis7') { bottom=Math.min(0,bottom); top=Math.max(0,top); }
         const padding=Math.max((top-bottom)*.08,Math.abs(top)*.001,.01);
-        update[axis+'.range']=[bottom-padding,top+padding];
+        if(fitPrice) update[axis+'.range']=[bottom-padding,top+padding];
     }
     for (const axis of ['xaxis','xaxis3','xaxis4','xaxis5','xaxis6','xaxis7']) {
         // Set the matched root axis too; otherwise Plotly can restore its old range
@@ -355,7 +361,7 @@ function updateProfile(range) {
 let profileTimer;
 function scheduleProfile(range) {
     clearTimeout(profileTimer);
-    profileTimer=setTimeout(()=>{if(busy) scheduleProfile(range); else updateProfile(range);},140);
+    profileTimer=setTimeout(()=>{if(busy) scheduleProfile(range); else {const fit=fitNextRange;fitNextRange=false;updateProfile(range,fit);}},140);
 }
 gd.on('plotly_relayout', event => {
     if (busy) return;
@@ -371,7 +377,7 @@ gd.on('plotly_relayout', event => {
 let resizeTimer;
 window.addEventListener('resize',()=>{
     clearTimeout(resizeTimer);
-    resizeTimer=setTimeout(()=>updateProfile(gd.layout.xaxis.range),200);
+    resizeTimer=setTimeout(()=>scheduleProfile(gd.layout.xaxis.range),200);
 });
 updateProfile([START, END]);
 '''
@@ -417,6 +423,7 @@ updateProfile([START, END]);
     <button type="button" data-mode="drawrect" aria-pressed="false">사각형</button>
     <button type="button" id="delete-shape" disabled title="선택한 도형 삭제 (Delete)">지우기 · Del</button>
     <button type="button" id="toggle-ma" aria-pressed="true" title="이동평균선 표시 전환">MA</button>
+    <button type="button" id="fit-price" title="표시 구간에 세로 눈금 맞추기">세로 맞춤</button>
     <button type="button" id="reset-view" title="최근 60봉과 자동 눈금으로 돌아가기">기본 보기</button>
     <button type="button" id="save-image" title="차트를 PNG 이미지로 저장">PNG 저장</button>
     </nav></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="drawing-status" role="status"></div><div id="drawdown-status" style="padding:3px 14px;font-size:12px;color:#93c5fd"></div><div id="profile-status" style="padding:3px 14px 6px;font-size:11px;color:#8e9bb0"></div>'''
