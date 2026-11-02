@@ -144,7 +144,7 @@ function showShapeSelection() {
     });
     document.getElementById('delete-shape').disabled=selectedShape===null || deletingShape;
     document.getElementById('drawing-status').textContent=selectedShape===null
-        ? '추세선·사각형을 클릭해 선택 → Delete로 삭제 · Esc 선택 해제'
+        ? '휠: 포인터 중심 확대 · Shift+휠: 좌우 이동 · 도형 선택 후 Del 삭제'
         : '도형 선택됨 · Delete로 삭제 · Esc 선택 해제';
 }
 function selectShape(index) {
@@ -374,6 +374,56 @@ gd.on('plotly_relayout', event => {
     if (!range) range=gd.layout[axis].range;
     scheduleProfile(range);
 });
+// Coalesce high-frequency trackpad/wheel events; never overlap Plotly redraws.
+let wheelTarget=null, wheelFrame=null, wheelDrawing=false;
+const timeAxes=['xaxis','xaxis3','xaxis4','xaxis5','xaxis6','xaxis7'];
+function boundedRange(left,width) {
+    width=Math.max(Math.min(10,records.length),Math.min(records.length+10,width));
+    left=Math.max(-5.5,Math.min(records.length+4.5-width,left));
+    return [left,left+width];
+}
+function renderWheel() {
+    wheelFrame=null;
+    if(!wheelTarget) return;
+    if(busy || wheelDrawing) {wheelFrame=requestAnimationFrame(renderWheel);return;}
+    const range=wheelTarget.slice();
+    wheelDrawing=true;
+    const update={};
+    timeAxes.forEach(axis=>{update[axis+'.range']=range;update[axis+'.autorange']=false;});
+    Plotly.relayout(gd,update).finally(()=>{
+        wheelDrawing=false;
+        if(wheelTarget && wheelTarget.some((v,i)=>v!==range[i])) {
+            wheelFrame=requestAnimationFrame(renderWheel);
+        } else {wheelTarget=null;scheduleProfile(gd.layout.xaxis.range);}
+    });
+}
+document.addEventListener('pointerdown',()=>{
+    wheelTarget=null;
+    if(wheelFrame) cancelAnimationFrame(wheelFrame);
+    wheelFrame=null;
+},true);
+gd.addEventListener('wheel',event=>{
+    if(event.ctrlKey || event.metaKey) return;
+    const rect=gd.getBoundingClientRect(), layout=gd._fullLayout, axis=layout.xaxis;
+    const px=event.clientX-rect.left, py=event.clientY-rect.top;
+    if(px<axis._offset || px>axis._offset+axis._length || py<layout._size.t || py>layout._size.t+layout._size.h) return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearTimeout(profileTimer);
+    hideCrosshair();
+    const range=wheelTarget || gd.layout.xaxis.range;
+    const width=range[1]-range[0], fraction=(px-axis._offset)/axis._length;
+    const unit=event.deltaMode===1?16:event.deltaMode===2?gd.clientHeight:1;
+    const horizontal=event.shiftKey || Math.abs(event.deltaX)>Math.abs(event.deltaY);
+    const raw=(horizontal && event.deltaX ? event.deltaX : event.deltaY)*unit;
+    const delta=Math.max(-120,Math.min(120,raw));
+    if(horizontal) wheelTarget=boundedRange(range[0]+delta*width/600,width);
+    else {
+        const nextWidth=Math.max(Math.min(10,records.length),Math.min(records.length+10,width*Math.exp(delta*.0015)));
+        wheelTarget=boundedRange(range[0]+fraction*(width-nextWidth),nextWidth);
+    }
+    if(!wheelFrame && !wheelDrawing) wheelFrame=requestAnimationFrame(renderWheel);
+},{passive:false,capture:true});
 let resizeTimer;
 window.addEventListener('resize',()=>{
     clearTimeout(resizeTimer);
@@ -387,7 +437,7 @@ updateProfile([START, END]);
               .replace('BINS', str(int(bins))).replace('PROFILE',str(profile_index))
               .replace('START',str(start-.5)).replace('END',str(len(frame)-.5)))
     html = fig.to_html(full_html=True, include_plotlyjs=True, div_id='analysis-chart', post_script=script,
-                       config={'scrollZoom':True,'displaylogo':False,'responsive':True,'displayModeBar':False,
+                       config={'scrollZoom':False,'displaylogo':False,'responsive':True,'displayModeBar':False,
                                'modeBarButtonsToAdd':['drawline','drawrect','eraseshape'], 'toImageButtonOptions':{'filename':'chart-analysis'}})
     toolbar = '''<style>
     * {box-sizing:border-box;}
