@@ -4,6 +4,7 @@ import time
 import json
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 import pandas as pd
 from analysis import validate_prices
 
@@ -39,7 +40,7 @@ def fetch_crypto(value, market, limit=1500):
             if market=='바이낸스':
                 params={'symbol':symbol,'interval':'1d','limit':count}
                 if cursor is not None: params['endTime']=cursor
-                batch=_get('https://api.binance.com/api/v3/klines',params)
+                batch=_get('https://data-api.binance.vision/api/v3/klines',params)
                 if not isinstance(batch,list): raise ValueError('거래쌍 응답이 올바르지 않습니다.')
                 if not batch: break
                 rows.extend([[pd.to_datetime(r[0],unit='ms'),*map(float,r[1:6])] for r in batch])
@@ -56,6 +57,18 @@ def fetch_crypto(value, market, limit=1500):
             cursor=next_cursor
             if len(batch)<count: break
             if market=='업비트': time.sleep(.13)
+    except HTTPError as error:
+        if error.code in (403, 451):
+            reason='서버 접근이 제한되었습니다. 배포 서버의 지역/IP 또는 네트워크 정책을 확인해야 합니다.'
+        elif error.code in (418, 429):
+            reason='거래소 요청 한도를 초과했습니다. 잠시 후 다시 시도하세요.'
+        elif error.code in (400, 404):
+            reason='거래쌍 또는 요청을 찾을 수 없습니다. 현물 상장 코드와 거래쌍을 확인하세요.'
+        else:
+            reason='거래소 서버에서 오류를 반환했습니다. 잠시 후 다시 시도하세요.'
+        raise RuntimeError(f'{market} {symbol} 시세 조회 실패 (HTTP {error.code}). {reason}') from error
+    except (URLError, TimeoutError) as error:
+        raise RuntimeError(f'{market} {symbol} 시세 서버 연결에 실패했습니다. 네트워크·DNS·연결 시간 초과 문제입니다.') from error
     except Exception as error:
         raise RuntimeError(f'{market} 공개 시세 조회에 실패했습니다. 거래쌍·상장 상태와 거래소의 지역/IP 접근 제한을 확인하세요. 일부 데이터만으로 분석하지 않습니다.') from error
     if not rows: raise ValueError('해당 거래쌍의 일봉이 없습니다.')

@@ -15,6 +15,7 @@ class CryptoTests(unittest.TestCase):
         with patch('crypto_data._get',side_effect=[rows[1:],rows[:1]]) as request:
             frame,_,_=fetch_crypto('BTCUSDT','바이낸스',1001)
             self.assertEqual(len(frame),1001)
+            self.assertEqual(request.call_args_list[0].args[0], 'https://data-api.binance.vision/api/v3/klines')
             self.assertEqual(request.call_args_list[1].args[1]['endTime'],86400000-1)
     def test_upbit_fields(self):
         row={'candle_date_time_utc':'2026-10-30T00:00:00','opening_price':10,'high_price':12,'low_price':9,'trade_price':11,'candle_acc_trade_volume':100}
@@ -29,3 +30,16 @@ class CryptoTests(unittest.TestCase):
         weekly=resample_bars(frame,'업비트','주봉',now)
         self.assertEqual(len(weekly),2)
         self.assertEqual(weekly.iloc[-1].Volume,700)
+
+    def test_http_errors_identify_cause(self):
+        from urllib.error import HTTPError
+        for status, message in [(451,'접근이 제한'),(429,'요청 한도'),(400,'거래쌍 또는 요청')]:
+            with self.subTest(status=status), patch('crypto_data._get',side_effect=HTTPError('https://example.com',status,'error',{},None)):
+                with self.assertRaisesRegex(RuntimeError,message):
+                    fetch_crypto('ETHUSDT','바이낸스')
+    def test_second_page_failure_never_returns_partial_prices(self):
+        from urllib.error import HTTPError
+        rows=[[i*86400000,10,12,9,11,100] for i in range(1000)]
+        with patch('crypto_data._get',side_effect=[rows,HTTPError('https://example.com',429,'error',{},None)]):
+            with self.assertRaisesRegex(RuntimeError,'429'):
+                fetch_crypto('ETHUSDT','바이낸스')
