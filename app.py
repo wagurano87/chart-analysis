@@ -5,7 +5,7 @@ import streamlit as st
 
 from analysis import MA_WINDOWS, assess, completed_daily_bars, indicators, resample_bars
 from charts import chart_html
-from crypto_data import CRYPTO_MARKETS, crypto_symbol, quote_currency
+from crypto_data import CRYPTO_MARKETS, crypto_symbol, quote_currency, fetch_crypto, completed_four_hour_bars
 from symbol_search import render_symbol_search
 from data import demo_prices, fetch_prices, read_csv, symbols
 
@@ -70,14 +70,27 @@ if "analysis_result" not in st.session_state:
 daily, provider, tv_symbol, market, ticker, removed, mode = st.session_state["analysis_result"]
 # Fill this container after calculation so the period control sits directly above the chart.
 summary = st.container()
-timeframe = st.radio("차트 주기", ["일봉", "주봉"], horizontal=True,
+period_options = ["일봉", "주봉", "4시간봉"] if market in CRYPTO_MARKETS and mode == "온라인 시세" else ["일봉", "주봉"]
+if st.session_state.get('chart_timeframe') not in period_options:
+    st.session_state['chart_timeframe'] = '일봉'
+timeframe = st.radio("차트 주기", period_options, horizontal=True,
                      key="chart_timeframe", label_visibility="collapsed")
 try:
-    frame = indicators(resample_bars(daily, market, timeframe))
-except ValueError as error:
+    if timeframe == '4시간봉':
+        @st.cache_data(ttl=300, show_spinner=False)
+        def load_four_hour(ticker, market):
+            return fetch_crypto(ticker, market, interval='4h')
+        with st.spinner('4시간봉을 불러오는 중입니다…'):
+            intraday, provider, tv_symbol = load_four_hour(ticker, market)
+        completed = completed_four_hour_bars(intraday)
+        removed = len(intraday)-len(completed)
+        frame = indicators(completed)
+    else:
+        frame = indicators(resample_bars(daily, market, timeframe))
+except (ValueError, RuntimeError) as error:
     st.error(str(error))
     st.stop()
-period = "일" if timeframe == "일봉" else "주"
+period = "일" if timeframe == "일봉" else "주" if timeframe == "주봉" else " × 4시간"
 last, prev = frame.iloc[-1], frame.iloc[-2]
 signal = assess(frame)
 with summary:
@@ -89,7 +102,9 @@ with summary:
             st.write(', '.join(excluded_prices))
     if daily.attrs.get('rounded_price_rows', 0):
         st.caption(f"수정주가 계산의 미세 오차 {daily.attrs['rounded_price_rows']}개 봉을 보정했습니다.")
-    st.caption(f"{provider} · {timeframe} · 마지막 완료 봉 {frame.index[-1]:%Y-%m-%d} · {len(frame):,}개 봉")
+    st.caption(f"{provider} · {timeframe} · 마지막 완료 봉 {frame.index[-1]:%Y-%m-%d %H:%M} · {len(frame):,}개 봉")
+    if timeframe == "4시간봉":
+        st.caption("4시간봉 날짜·시간은 UTC 기준이며 봉 시작 시각입니다. 진행 중인 봉은 제외합니다. 한국 시각은 +9시간입니다.")
     if tv_symbol is None:
         st.warning("현재 모든 수치와 신호는 설명용 가상 데이터입니다. 실제 종목의 투자 판단에 사용하지 마세요.")
     notify = st.error if signal["level"] == "위험" else st.warning if signal["level"] == "주의" else st.info

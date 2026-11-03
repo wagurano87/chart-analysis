@@ -43,3 +43,18 @@ class CryptoTests(unittest.TestCase):
         with patch('crypto_data._get',side_effect=[rows,HTTPError('https://example.com',429,'error',{},None)]):
             with self.assertRaisesRegex(RuntimeError,'429'):
                 fetch_crypto('ETHUSDT','바이낸스')
+    def test_four_hour_timestamps_and_incomplete_filter(self):
+        from crypto_data import completed_four_hour_bars
+        rows=[[i*14400000,10,12,9,11,100] for i in range(4)]
+        with patch('crypto_data._get',return_value=rows) as request:
+            frame,_,_=fetch_crypto('ETHUSDT','바이낸스',4,interval='4h')
+            self.assertEqual(request.call_args.args[1]['interval'],'4h')
+            self.assertEqual(len(frame),4)
+            self.assertEqual(frame.index[1].hour,4)
+            self.assertEqual(len(completed_four_hour_bars(frame,'1970-01-01T10:00:00Z')),2)
+    def test_upbit_four_hour_endpoint(self):
+        row={'candle_date_time_utc':'2026-10-30T04:00:00','opening_price':10,'high_price':12,'low_price':9,'trade_price':11,'candle_acc_trade_volume':100}
+        with patch('crypto_data._get',return_value=[row]) as request:
+            frame,_,_=fetch_crypto('KRW-BTC','업비트',interval='4h')
+            self.assertTrue(request.call_args.args[0].endswith('/minutes/240'))
+            self.assertEqual(frame.index[0].hour,4)

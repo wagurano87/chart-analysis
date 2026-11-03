@@ -8,7 +8,7 @@ import pandas as pd
 
 MA_WINDOWS = (10, 20, 60, 120, 200, 365)
 
-def validate_prices(frame):
+def validate_prices(frame, normalize_dates=True):
     frame = frame.copy()
     required = ["Open", "High", "Low", "Close", "Volume"]
     if not set(required).issubset(frame.columns):
@@ -18,7 +18,7 @@ def validate_prices(frame):
         raise ValueError("해석할 수 없는 날짜가 있습니다.")
     if dates.tz is not None:
         dates = dates.tz_localize(None)
-    frame.index = dates.normalize()
+    frame.index = dates.normalize() if normalize_dates else dates
     if frame.index.duplicated().any():
         raise ValueError("같은 날짜의 행이 중복되어 있습니다. 일봉 데이터만 입력하세요.")
     frame = frame[required].apply(pd.to_numeric, errors="coerce").sort_index()

@@ -30,7 +30,9 @@ def _get(url, params):
         return json.load(response)
 
 
-def fetch_crypto(value, market, limit=1500):
+def fetch_crypto(value, market, limit=1500, interval="1d"):
+    if interval not in {"1d", "4h"}:
+        raise ValueError("지원하지 않는 코인 주기입니다.")
     symbol=crypto_symbol(value,market)
     rows=[]
     cursor=None
@@ -38,7 +40,7 @@ def fetch_crypto(value, market, limit=1500):
         while len(rows)<limit:
             count=min(limit-len(rows),1000 if market=='바이낸스' else 200)
             if market=='바이낸스':
-                params={'symbol':symbol,'interval':'1d','limit':count}
+                params={'symbol':symbol,'interval':interval,'limit':count}
                 if cursor is not None: params['endTime']=cursor
                 batch=_get('https://data-api.binance.vision/api/v3/klines',params)
                 if not isinstance(batch,list): raise ValueError('거래쌍 응답이 올바르지 않습니다.')
@@ -48,7 +50,7 @@ def fetch_crypto(value, market, limit=1500):
             else:
                 params={'market':symbol,'count':count}
                 if cursor is not None: params['to']=cursor
-                batch=_get('https://api.upbit.com/v1/candles/days',params)
+                batch=_get('https://api.upbit.com/v1/candles/'+('days' if interval=='1d' else 'minutes/240'),params)
                 if not isinstance(batch,list): raise ValueError('거래쌍 응답이 올바르지 않습니다.')
                 if not batch: break
                 rows.extend([[pd.Timestamp(r['candle_date_time_utc']),r['opening_price'],r['high_price'],r['low_price'],r['trade_price'],r['candle_acc_trade_volume']] for r in batch])
@@ -74,7 +76,7 @@ def fetch_crypto(value, market, limit=1500):
     if not rows: raise ValueError('해당 거래쌍의 일봉이 없습니다.')
     frame=pd.DataFrame(rows,columns=['Date','Open','High','Low','Close','Volume']).set_index('Date')
     frame=frame.loc[~frame.index.duplicated()].sort_index().tail(limit)
-    return validate_prices(frame), f'{market} · {symbol}', symbol
+    return validate_prices(frame, normalize_dates=interval=="1d"), f'{market} · {symbol}', symbol
 
 
 def quote_currency(value,market):
@@ -83,3 +85,9 @@ def quote_currency(value,market):
     for quote in ['FDUSD','USDT','USDC','TUSD','BTC','ETH','BNB','EUR','TRY']:
         if symbol.endswith(quote): return quote
     return '호가 통화'
+
+
+def completed_four_hour_bars(frame, now=None):
+    current=pd.Timestamp.now(tz='UTC') if now is None else pd.Timestamp(now)
+    current=current.tz_localize('UTC') if current.tzinfo is None else current.tz_convert('UTC')
+    return frame.loc[frame.index+pd.Timedelta(hours=4)<=current.tz_localize(None)].copy()

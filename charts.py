@@ -8,7 +8,7 @@ from analysis import MA_WINDOWS
 
 def chart_html(frame, timeframe, bins=32):
     x = list(range(len(frame)))
-    dates = frame.index.strftime('%Y-%m-%d').tolist()
+    dates = frame.index.strftime('%Y-%m-%d %H:%M' if timeframe=='4시간봉' else '%Y-%m-%d').tolist()
     fig = make_subplots(rows=6, cols=2, shared_xaxes=True, shared_yaxes=True,
                         column_widths=[.88, .12], row_heights=[.46, .07, .14, .14, .10, .09],
                         horizontal_spacing=.075, vertical_spacing=.032,
