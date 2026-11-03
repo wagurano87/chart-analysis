@@ -453,7 +453,7 @@ function positionAxisControls() {
             control=document.createElement('div');
             control.dataset.wheelAxis=key;
             control.className='axis-wheel-control';
-            control.title='드래그: 상하 이동 · 휠: 세로 확대·축소 · 세로 맞춤: 복원';
+            control.title='드래그: 세로 확대·축소 · 휠: 세로 확대·축소 · 세로 맞춤: 복원';
             let drag=null;
             control.addEventListener('pointerdown',event=>{
                 if(event.button!==0) return;
@@ -467,8 +467,10 @@ function positionAxisControls() {
             control.addEventListener('pointermove',event=>{
                 if(!drag || drag.id!==event.pointerId) return;
                 event.preventDefault();event.stopPropagation();
-                const offset=(event.clientY-drag.y)*(drag.range[1]-drag.range[0])/drag.height;
-                verticalTargets[key]=drag.range.map(value=>value+offset);
+                const center=(drag.range[0]+drag.range[1])/2;
+                const factor=Math.exp(Math.max(-6,Math.min(6,(event.clientY-drag.y)/drag.height*2)));
+                const half=(drag.range[1]-drag.range[0])*factor/2;
+                verticalTargets[key]=[center-half,center+half];
                 if(!wheelFrame && !wheelDrawing) wheelFrame=requestAnimationFrame(renderWheel);
             });
             const finish=event=>{
@@ -554,6 +556,8 @@ updateProfile([START, END]);
     * {box-sizing:border-box;}
     #chart-toolbar {display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;padding:6px 10px;background:#171c28;border-bottom:1px solid #2a3140;}
     #range-toolbar,#tools {display:flex;gap:3px;flex-wrap:wrap;}
+    #tools {width:100%;border-top:1px solid #2a3140;padding-top:4px;}
+    #fib-tool {border:1px solid #60a5fa!important;color:#93c5fd!important;}
     #candle-readout {padding:8px 14px 2px;font-size:13px;line-height:1.7;font-variant-numeric:tabular-nums;min-height:32px;}
     #indicator-readout {padding:2px 14px;font-size:11px;color:#c4b5fd;line-height:1.7;min-height:23px;font-variant-numeric:tabular-nums;}
     #chart-toolbar button {background:transparent;color:#cbd5e1;border:1px solid transparent;border-radius:4px;padding:6px 9px;cursor:pointer;font-size:12px;}
@@ -581,7 +585,7 @@ updateProfile([START, END]);
     </nav><nav id="tools" aria-label="차트 조작 도구">
     <button type="button" data-mode="pan" aria-pressed="true" title="차트 안에서 상하좌우 드래그로 이동">이동</button>
     <button type="button" data-mode="zoom" aria-pressed="false" title="드래그한 구간 확대">확대</button>
-    <button type="button" id="fib-tool" aria-pressed="false" title="가격 차트에서 시작점부터 끝점까지 드래그 · 기준선 선택 후 Del 삭제">피보나치</button>
+    <button type="button" id="fib-tool" aria-pressed="false" title="가격 차트에서 시작점부터 끝점까지 드래그 · 기준선 선택 후 Del 삭제">피보나치 되돌림</button>
     <button type="button" id="measure-tool" aria-pressed="false" title="시작 가격에서 끝 가격으로 드래그">측정 ↗</button>
     <button type="button" data-mode="drawline" aria-pressed="false">추세선</button>
     <button type="button" data-mode="drawrect" aria-pressed="false">사각형</button>

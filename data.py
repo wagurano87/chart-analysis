@@ -87,3 +87,27 @@ def demo_prices():
     return pd.DataFrame({"Open": opening, "High": opening * 1.01,
                          "Low": close * .99, "Close": close, "Volume": volume},
                         index=pd.bdate_range(end=pd.Timestamp.today().normalize() - pd.Timedelta(days=1), periods=len(close)))
+
+
+def stock_four_hour(symbol, market, now=None):
+    """Session-aligned 4h bars, with the shorter closing session bar retained."""
+    import yfinance as yf
+    zone='Asia/Seoul' if market=='한국' else 'America/New_York'
+    try:
+        raw=yf.download(symbol,period='1y',interval='1h',auto_adjust=True,progress=False,threads=False,timeout=15)
+    except Exception as error:
+        raise RuntimeError('주식 시간봉 조회에 실패했습니다. 제공처 연결을 확인하세요.') from error
+    if raw.empty: raise ValueError('이 종목의 시간봉을 제공처에서 받지 못했습니다.')
+    if isinstance(raw.columns,pd.MultiIndex): raw.columns=raw.columns.get_level_values(0)
+    if raw.index.tz is None: raw.index=raw.index.tz_localize(zone)
+    else: raw.index=raw.index.tz_convert(zone)
+    raw=raw.between_time('09:00' if market=='한국' else '09:30','15:30' if market=='한국' else '16:00',inclusive='left')
+    current=pd.Timestamp.now(tz=zone) if now is None else pd.Timestamp(now).tz_convert(zone)
+    # Conservative: don't use today's data until the regular-session safety cutoff.
+    cutoff=16 if market=='한국' else 17
+    if current.hour<cutoff: raw=raw.loc[raw.index.normalize()<current.normalize()]
+    raw=raw.loc[raw.index<=current]
+    groups=[day.resample('4h',origin='start_day',offset='9h' if market=='한국' else '9h30min').agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'}).dropna() for _,day in raw.groupby(raw.index.date)]
+    if not groups: raise ValueError('완료된 정규장 시간봉이 부족합니다.')
+    frame=pd.concat(groups)
+    return validate_prices(frame,normalize_dates=False)
