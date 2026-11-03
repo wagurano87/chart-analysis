@@ -124,9 +124,24 @@ let shapeCount = protectedShapeCount;
 let selectedShape = null;
 let deletingShape = false;
 let measuring = false;
+let fibonacci = false;
 function refreshMeasurements() {
-    const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('measure-'));
+    const annotations=(gd.layout.annotations || []).filter(a=>!/^measure-|^fib-/.test(String(a.name || '')));
     (gd.layout.shapes || []).forEach((shape,i)=>{
+        if(shape.name==='fibonacci') {
+            const levels=[0,.236,.382,.5,.618,.786,1];
+            const colors=['#94a3b8','#f87171','#fb923c','#facc15','#34d399','#60a5fa','#c084fc'];
+            levels.forEach((level,j)=>{
+                const price=shape.y1+(shape.y0-shape.y1)*level;
+                annotations.push({name:`fib-${i}-${j}`,x:shape.x1,y:price,xref:shape.xref,yref:shape.yref,
+                    ax:shape.x0,ay:price,axref:shape.xref,ayref:shape.yref,
+                    text:`${(level*100).toFixed(1)}% · ${number(price,8)}`,
+                    showarrow:true,arrowhead:0,arrowwidth:1.5,arrowcolor:colors[j],
+                    standoff:0,startstandoff:0,bgcolor:'#131722',borderpad:2,
+                    font:{size:11,color:colors[j]},captureevents:false});
+            });
+            return;
+        }
         if(shape.name!=='measurement') return;
         const start=Math.round(shape.x0), end=Math.round(shape.x1);
         if(!dates[start] || !dates[end] || !shape.y0) return;
@@ -169,6 +184,11 @@ gd.on('plotly_relayout',event=>{
     if(!Object.keys(event).some(key=>key==='shapes' || key.startsWith('shapes['))) return;
     const count=(gd.layout.shapes || []).length;
     if(count>shapeCount) {
+        if(fibonacci && gd.layout.shapes[count-1].yref==='y') {
+            const shape=gd.layout.shapes[count-1];
+            shape.name='fibonacci';
+            shape.line={...shape.line,dash:'dot',color:'#94a3b8'};
+        }
         if(measuring && gd.layout.shapes[count-1].yref==='y') {
             const shape=gd.layout.shapes[count-1];
             shape.name='measurement';
@@ -254,21 +274,29 @@ gd.addEventListener('pointermove',event=>{
 gd.addEventListener('pointerleave',()=>{cancelAnimationFrame(cursorFrame);hideCrosshair();showCandle(records.length-1);});
 document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>{
     measuring=false;
+    fibonacci=false;
     Plotly.relayout(gd,{dragmode:button.dataset.mode});
 }));
 document.getElementById('measure-tool').addEventListener('click',()=>{
     measuring=true;
+    fibonacci=false;
+    Plotly.relayout(gd,{dragmode:'drawline'});
+});
+document.getElementById('fib-tool').addEventListener('click',()=>{
+    measuring=false;fibonacci=true;
     Plotly.relayout(gd,{dragmode:'drawline'});
 });
 function syncTools() {
+    document.getElementById('fib-tool').setAttribute('aria-pressed',String(fibonacci));
     document.getElementById('measure-tool').setAttribute('aria-pressed',String(measuring));
-    document.querySelectorAll('[data-mode]').forEach(button=>button.setAttribute('aria-pressed',String(!measuring && gd.layout.dragmode===button.dataset.mode)));
+    document.querySelectorAll('[data-mode]').forEach(button=>button.setAttribute('aria-pressed',String(!measuring && !fibonacci && gd.layout.dragmode===button.dataset.mode)));
 }
 gd.on('plotly_relayout',syncTools);
 syncTools();
 document.getElementById('reset-view').addEventListener('click',()=>{
     hideCrosshair();
     measuring=false;
+    fibonacci=false;
     fitNextRange=true;
     Plotly.relayout(gd,{'xaxis.range':[Math.max(-.5,records.length-60-.5),records.length-.5],dragmode:'pan'});
 });
@@ -553,6 +581,7 @@ updateProfile([START, END]);
     </nav><nav id="tools" aria-label="차트 조작 도구">
     <button type="button" data-mode="pan" aria-pressed="true" title="차트 안에서 상하좌우 드래그로 이동">이동</button>
     <button type="button" data-mode="zoom" aria-pressed="false" title="드래그한 구간 확대">확대</button>
+    <button type="button" id="fib-tool" aria-pressed="false" title="가격 차트에서 시작점부터 끝점까지 드래그 · 기준선 선택 후 Del 삭제">피보나치</button>
     <button type="button" id="measure-tool" aria-pressed="false" title="시작 가격에서 끝 가격으로 드래그">측정 ↗</button>
     <button type="button" data-mode="drawline" aria-pressed="false">추세선</button>
     <button type="button" data-mode="drawrect" aria-pressed="false">사각형</button>
