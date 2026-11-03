@@ -410,16 +410,42 @@ document.addEventListener('pointerdown',()=>{
     if(wheelFrame) cancelAnimationFrame(wheelFrame);
     wheelFrame=null;
 },true);
+// Explicit hit targets cover the actual tick labels, including label overflow.
+const verticalAxes=['yaxis','yaxis3','yaxis4','yaxis5','yaxis6','yaxis7'];
+function positionAxisControls() {
+    const layout=gd._fullLayout;
+    if(!layout) return;
+    verticalAxes.forEach(key=>{
+        let control=gd.querySelector('[data-wheel-axis="'+key+'"]');
+        if(!control) {
+            control=document.createElement('div');
+            control.dataset.wheelAxis=key;
+            control.className='axis-wheel-control';
+            control.title='마우스 휠로 세로 확대·축소 · 세로 맞춤으로 복원';
+            gd.appendChild(control);
+        }
+        const a=layout[key], right=layout.xaxis._offset+layout.xaxis._length;
+        const ticks=gd.querySelectorAll('.'+(key==='yaxis'?'y':key.replace('axis',''))+'tick text');
+        let edge=right+64;
+        const box=gd.getBoundingClientRect();
+        ticks.forEach(t=>{edge=Math.max(edge,t.getBoundingClientRect().right-box.left+8);});
+        Object.assign(control.style,{left:(right-4)+'px',top:a._offset+'px',
+            width:Math.min(gd.clientWidth-right+4,edge-right+4)+'px',height:a._length+'px'});
+    });
+}
+gd.on('plotly_afterplot',positionAxisControls);
+positionAxisControls();
 gd.addEventListener('wheel',event=>{
     if(event.ctrlKey || event.metaKey) return;
     const rect=gd.getBoundingClientRect(), layout=gd._fullLayout, axis=layout.xaxis;
     const px=event.clientX-rect.left, py=event.clientY-rect.top;
     const right=axis._offset+axis._length;
     const gutterEnd=Math.min(gd.clientWidth,layout.xaxis2._offset);
-    const verticalAxis=['yaxis','yaxis3','yaxis4','yaxis5','yaxis6','yaxis7'].find(key=>{
+    const hitAxis=event.target.closest('[data-wheel-axis]')?.dataset.wheelAxis;
+    const verticalAxis=hitAxis || verticalAxes.find(key=>{
         const a=layout[key];return py>=a._offset && py<=a._offset+a._length;
     });
-    if(px>=right && px<gutterEnd && verticalAxis) {
+    if(verticalAxis && (hitAxis || (px>=right-4 && px<gutterEnd))) {
         event.preventDefault();event.stopPropagation();
         clearTimeout(profileTimer);hideCrosshair();
         const a=layout[verticalAxis], values=verticalTargets[verticalAxis] || gd.layout[verticalAxis].range;
@@ -481,6 +507,8 @@ updateProfile([START, END]);
     #analysis-chart:focus-visible {outline:1px solid #60a5fa;outline-offset:-1px;}
     .selected-drawing path {filter:drop-shadow(0 0 3px #93c5fd);stroke:#93c5fd!important;}
     #drawing-status {padding:2px 14px;font-size:11px;color:#94a3b8;}
+    .axis-wheel-control {position:absolute;z-index:30;pointer-events:auto;cursor:ns-resize;background:transparent;}
+    .axis-wheel-control:hover {background:rgba(96,165,250,.12);border-right:2px solid #60a5fa;}
     .crosshair {position:absolute;pointer-events:none;z-index:20;display:none;}
     #cross-v {border-left:1px dashed #959eaf;}
     #cross-h {border-top:1px dashed #959eaf;}
