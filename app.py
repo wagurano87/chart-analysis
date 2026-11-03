@@ -4,7 +4,6 @@ import pandas as pd
 import streamlit as st
 
 from analysis import MA_WINDOWS, assess, completed_daily_bars, indicators, resample_bars
-from charts import chart_html
 from crypto_data import CRYPTO_MARKETS, crypto_symbol, quote_currency, fetch_crypto, completed_four_hour_bars
 from symbol_search import render_symbol_search
 from market_data import demo_prices, fetch_prices, read_csv, symbols, stock_four_hour
@@ -116,6 +115,8 @@ with summary:
     notify(f"매도 검토 경고: {signal['level']} · {timeframe} MACD(19,39,9)")
     if bool(last.MACD19SellSignal):
         st.warning(f"▼ 새 매도 주의 시그널 · {frame.index[-1]:%Y-%m-%d}: MACD 0선 상향 돌파 후 양수 구간에서 오실레이터가 음수로 전환했습니다.")
+
+from charts import chart_html
 
 st.iframe(chart_html(frame, timeframe, bins), height=1290)
 st.caption("▼ 매도 주의 시그널 · 우측 VRVP는 표시 구간의 OHLCV로 추정한 거래량 분포이며 노란 막대는 추정 POC입니다.")
