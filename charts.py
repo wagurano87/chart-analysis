@@ -421,7 +421,33 @@ function positionAxisControls() {
             control=document.createElement('div');
             control.dataset.wheelAxis=key;
             control.className='axis-wheel-control';
-            control.title='마우스 휠로 세로 확대·축소 · 세로 맞춤으로 복원';
+            control.title='드래그: 상하 이동 · 휠: 세로 확대·축소 · 세로 맞춤: 복원';
+            let drag=null;
+            control.addEventListener('pointerdown',event=>{
+                if(event.button!==0) return;
+                event.preventDefault();event.stopPropagation();
+                clearTimeout(profileTimer);hideCrosshair();
+                const axis=gd._fullLayout[key];
+                drag={id:event.pointerId,y:event.clientY,range:gd.layout[key].range.slice(),height:axis._length};
+                control.setPointerCapture(event.pointerId);
+                control.classList.add('axis-dragging');
+            });
+            control.addEventListener('pointermove',event=>{
+                if(!drag || drag.id!==event.pointerId) return;
+                event.preventDefault();event.stopPropagation();
+                const offset=(event.clientY-drag.y)*(drag.range[1]-drag.range[0])/drag.height;
+                verticalTargets[key]=drag.range.map(value=>value+offset);
+                if(!wheelFrame && !wheelDrawing) wheelFrame=requestAnimationFrame(renderWheel);
+            });
+            const finish=event=>{
+                if(!drag || drag.id!==event.pointerId) return;
+                drag=null;
+                control.classList.remove('axis-dragging');
+                if(control.hasPointerCapture(event.pointerId)) control.releasePointerCapture(event.pointerId);
+            };
+            control.addEventListener('pointerup',finish);
+            control.addEventListener('pointercancel',finish);
+            control.addEventListener('lostpointercapture',finish);
             gd.appendChild(control);
         }
         const a=layout[key], right=layout.xaxis._offset+layout.xaxis._length;
@@ -507,8 +533,8 @@ updateProfile([START, END]);
     #analysis-chart:focus-visible {outline:1px solid #60a5fa;outline-offset:-1px;}
     .selected-drawing path {filter:drop-shadow(0 0 3px #93c5fd);stroke:#93c5fd!important;}
     #drawing-status {padding:2px 14px;font-size:11px;color:#94a3b8;}
-    .axis-wheel-control {position:absolute;z-index:30;pointer-events:auto;cursor:ns-resize;background:transparent;}
-    .axis-wheel-control:hover {background:rgba(96,165,250,.12);border-right:2px solid #60a5fa;}
+    .axis-wheel-control {position:absolute;z-index:30;pointer-events:auto;cursor:ns-resize;background:transparent;touch-action:none;user-select:none;}
+    .axis-wheel-control:hover,.axis-wheel-control.axis-dragging {background:rgba(96,165,250,.12);border-right:2px solid #60a5fa;}
     .crosshair {position:absolute;pointer-events:none;z-index:20;display:none;}
     #cross-v {border-left:1px dashed #959eaf;}
     #cross-h {border-top:1px dashed #959eaf;}
