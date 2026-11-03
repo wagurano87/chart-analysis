@@ -144,7 +144,7 @@ function showShapeSelection() {
     });
     document.getElementById('delete-shape').disabled=selectedShape===null || deletingShape;
     document.getElementById('drawing-status').textContent=selectedShape===null
-        ? '휠: 포인터 중심 확대 · Shift+휠: 좌우 이동 · 도형 선택 후 Del 삭제'
+        ? '차트 휠: 시간축 확대 · 오른쪽 눈금 휠: 세로 확대 · Shift+휠: 좌우 이동 · 도형 선택 후 Del 삭제'
         : '도형 선택됨 · Delete로 삭제 · Esc 선택 해제';
 }
 function selectShape(index) {
@@ -376,6 +376,7 @@ gd.on('plotly_relayout', event => {
 });
 // Coalesce high-frequency trackpad/wheel events; never overlap Plotly redraws.
 let wheelTarget=null, wheelFrame=null, wheelDrawing=false;
+let verticalTargets={};
 const timeAxes=['xaxis','xaxis3','xaxis4','xaxis5','xaxis6','xaxis7'];
 function boundedRange(left,width) {
     width=Math.max(Math.min(10,records.length),Math.min(records.length+10,width));
@@ -384,21 +385,28 @@ function boundedRange(left,width) {
 }
 function renderWheel() {
     wheelFrame=null;
-    if(!wheelTarget) return;
+    if(!wheelTarget && !Object.keys(verticalTargets).length) return;
     if(busy || wheelDrawing) {wheelFrame=requestAnimationFrame(renderWheel);return;}
-    const range=wheelTarget.slice();
+    const range=wheelTarget ? wheelTarget.slice() : null;
+    const vertical={...verticalTargets};
     wheelDrawing=true;
     const update={};
-    timeAxes.forEach(axis=>{update[axis+'.range']=range;update[axis+'.autorange']=false;});
+    if(range) timeAxes.forEach(axis=>{update[axis+'.range']=range;update[axis+'.autorange']=false;});
+    Object.entries(vertical).forEach(([axis,values])=>{update[axis+'.range']=values;update[axis+'.autorange']=false;});
     Plotly.relayout(gd,update).finally(()=>{
         wheelDrawing=false;
-        if(wheelTarget && wheelTarget.some((v,i)=>v!==range[i])) {
+        Object.entries(vertical).forEach(([axis,values])=>{
+            if(verticalTargets[axis]===values) delete verticalTargets[axis];
+        });
+        if(range && wheelTarget && wheelTarget.every((v,i)=>v===range[i])) wheelTarget=null;
+        if(wheelTarget || Object.keys(verticalTargets).length) {
             wheelFrame=requestAnimationFrame(renderWheel);
         } else {wheelTarget=null;scheduleProfile(gd.layout.xaxis.range);}
     });
 }
 document.addEventListener('pointerdown',()=>{
     wheelTarget=null;
+    verticalTargets={};
     if(wheelFrame) cancelAnimationFrame(wheelFrame);
     wheelFrame=null;
 },true);
@@ -406,6 +414,25 @@ gd.addEventListener('wheel',event=>{
     if(event.ctrlKey || event.metaKey) return;
     const rect=gd.getBoundingClientRect(), layout=gd._fullLayout, axis=layout.xaxis;
     const px=event.clientX-rect.left, py=event.clientY-rect.top;
+    const right=axis._offset+axis._length;
+    const gutterEnd=Math.min(gd.clientWidth,layout.xaxis2._offset);
+    const verticalAxis=['yaxis','yaxis3','yaxis4','yaxis5','yaxis6','yaxis7'].find(key=>{
+        const a=layout[key];return py>=a._offset && py<=a._offset+a._length;
+    });
+    if(px>=right && px<gutterEnd && verticalAxis) {
+        event.preventDefault();event.stopPropagation();
+        clearTimeout(profileTimer);hideCrosshair();
+        const a=layout[verticalAxis], values=verticalTargets[verticalAxis] || gd.layout[verticalAxis].range;
+        const fraction=1-(py-a._offset)/a._length, width=values[1]-values[0];
+        const unit=event.deltaMode===1?16:event.deltaMode===2?gd.clientHeight:1;
+        const delta=Math.max(-120,Math.min(120,event.deltaY*unit));
+        const reference=Math.max(Math.abs(values[0]),Math.abs(values[1]),1);
+        const span=Math.max(reference*1e-8,Math.min(reference*1e6,width*Math.exp(delta*.0015)));
+        const anchor=values[0]+fraction*width;
+        verticalTargets[verticalAxis]=[anchor-fraction*span,anchor+(1-fraction)*span];
+        if(!wheelFrame && !wheelDrawing) wheelFrame=requestAnimationFrame(renderWheel);
+        return;
+    }
     if(px<axis._offset || px>axis._offset+axis._length || py<layout._size.t || py>layout._size.t+layout._size.h) return;
     event.preventDefault();
     event.stopPropagation();
