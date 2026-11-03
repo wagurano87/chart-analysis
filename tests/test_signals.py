@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import pandas as pd
 from analysis import indicators, oscillator_sell_signals
-from data import demo_prices
+from market_data import demo_prices
 
 
 class OscillatorSignalTests(unittest.TestCase):

@@ -24,10 +24,10 @@ class FinancialTests(unittest.TestCase):
         from pathlib import Path
         from unittest.mock import patch
         from streamlit.testing.v1 import AppTest
-        from data import demo_prices
+        from market_data import demo_prices
         dates=pd.date_range('2024-03-31',periods=8,freq='QE')
         frame=pd.DataFrame({'매출액':[100e6]*8,'영업이익':[10e6]*8,'영업이익률':[10.0]*8},index=dates)
-        with patch('data.fetch_prices',return_value=(demo_prices(),'TEST.KS','KRX:TEST')), patch('fundamentals.fetch_fundamentals',return_value=(frame,'KRW',1.2)):
+        with patch('market_data.fetch_prices',return_value=(demo_prices(),'TEST.KS','KRX:TEST')), patch('fundamentals.fetch_fundamentals',return_value=(frame,'KRW',1.2)):
             app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=30).run()
             app.button[0].click().run()
             app.button(key='load_financials').click().run()

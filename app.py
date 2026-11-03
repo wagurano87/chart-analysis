@@ -7,7 +7,7 @@ from analysis import MA_WINDOWS, assess, completed_daily_bars, indicators, resam
 from charts import chart_html
 from crypto_data import CRYPTO_MARKETS, crypto_symbol, quote_currency, fetch_crypto, completed_four_hour_bars
 from symbol_search import render_symbol_search
-from data import demo_prices, fetch_prices, read_csv, symbols, stock_four_hour
+from market_data import demo_prices, fetch_prices, read_csv, symbols, stock_four_hour
 
 st.set_page_config(page_title="차트 분석 · Dual MACD", layout="wide")
 st.title("주식·코인 차트 분석")

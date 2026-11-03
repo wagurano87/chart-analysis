@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from analysis import assess, completed_daily_bars, indicators, validate_prices, rsi, resample_bars
-from data import demo_prices, fetch_prices, read_csv, symbols
+from market_data import demo_prices, fetch_prices, read_csv, symbols
 
 
 class AnalysisTests(unittest.TestCase):

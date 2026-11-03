@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 import pandas as pd
-from data import stock_four_hour
+from market_data import stock_four_hour
 
 class StockIntradayTests(unittest.TestCase):
     def test_session_bars_across_dst(self):

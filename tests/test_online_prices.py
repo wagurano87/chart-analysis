@@ -1,5 +1,5 @@
 import unittest
-from data import demo_prices, prepare_online_prices
+from market_data import demo_prices, prepare_online_prices
 from analysis import validate_prices
 
 class OnlinePriceTests(unittest.TestCase):

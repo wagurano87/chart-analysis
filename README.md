@@ -122,7 +122,7 @@ MACD(19,39,9)가 **0 이하에서 양수로 상향 돌파**한 것을 확인한 
 - `app.py`: 웹 화면과 자체 분석 차트
 - `analysis.py`: 완료 봉 필터, 주봉 합산, 두 MACD·RSI·OBV·거래량·위험 규칙
 - `charts.py`: 다중 패널 차트 및 브라우저에서 표시 구간별 추정 VRVP 갱신
-- `data.py`: 종목코드 처리, Yahoo 조회, CSV 읽기, 가상 데이터
+- `market_data.py`: 종목코드 처리, Yahoo 조회, CSV 읽기, 가상 데이터
 - `tests/`: 지표 계산·경고 조건·입력 검증·앱 화면 검사
 - `install.ps1` / `start.ps1`: Windows 설치·실행
 

@@ -2,12 +2,24 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from streamlit.testing.v1 import AppTest
-from data import demo_prices
+from market_data import demo_prices
 
 APP = str(Path(__file__).resolve().parents[1] / "app.py")
 
 
 class AppTests(unittest.TestCase):
+    def test_startup_with_old_data_module_present(self):
+        import sys
+        import types
+        stale = types.ModuleType('data')
+        with patch.dict(sys.modules, {'data': stale}):
+            app = AppTest.from_file(APP, default_timeout=30).run()
+            self.assertEqual(len(app.exception), 0)
+            app.selectbox[0].select('가상 데이터 체험')
+            app.button[0].click().run()
+            self.assertEqual(len(app.exception), 0)
+            self.assertEqual(len(app.get('iframe')), 1)
+
     def test_demo_analysis_is_usable_without_network(self):
         app = AppTest.from_file(APP, default_timeout=30).run()
         self.assertEqual(len(app.exception), 0)
@@ -28,7 +40,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(len(app.metric), 0)
 
     def test_online_result_shows_only_analysis_chart(self):
-        with patch("data.fetch_prices", return_value=(demo_prices(), "005930.KS", "KRX:005930")):
+        with patch("market_data.fetch_prices", return_value=(demo_prices(), "005930.KS", "KRX:005930")):
             app = AppTest.from_file(APP, default_timeout=30).run()
             app.button[0].click().run()
         self.assertEqual(len(app.exception), 0)
