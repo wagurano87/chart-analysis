@@ -537,6 +537,52 @@ gd.addEventListener('wheel',event=>{
     }
     if(!wheelFrame && !wheelDrawing) wheelFrame=requestAnimationFrame(renderWheel);
 },{passive:false,capture:true});
+// Touch gestures are handled before Plotly's one-finger drag recognizer.
+let pinch=null, finishingPinch=false;
+function touchGeometry(touches) {
+    const box=gd.getBoundingClientRect(), a=touches[0], b=touches[1];
+    return {x:(a.clientX+b.clientX)/2-box.left,y:(a.clientY+b.clientY)/2-box.top,
+        distance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)};
+}
+gd.addEventListener('touchstart',event=>{
+    if(!['pan','zoom'].includes(gd.layout.dragmode)) return;
+    if(event.touches.length===1) {event.stopPropagation();return;}
+    if(event.touches.length!==2) return;
+    const point=touchGeometry(event.touches), layout=gd._fullLayout, x=layout.xaxis;
+    const key=verticalAxes.find(key=>{const a=layout[key];return point.y>=a._offset && point.y<=a._offset+a._length;});
+    if(!key || point.x<x._offset || point.x>x._offset+x._length || point.distance<10) return;
+    event.preventDefault();event.stopPropagation();
+    clearTimeout(profileTimer);hideCrosshair();
+    const y=layout[key], xr=gd.layout.xaxis.range.slice(), yr=gd.layout[key].range.slice();
+    pinch={key,distance:point.distance,xrange:xr,yrange:yr,
+        xanchor:xr[0]+(point.x-x._offset)/x._length*(xr[1]-xr[0]),
+        yanchor:yr[0]+(1-(point.y-y._offset)/y._length)*(yr[1]-yr[0])};
+    finishingPinch=true;
+},{passive:false,capture:true});
+gd.addEventListener('touchmove',event=>{
+    if(!pinch || event.touches.length!==2) {
+        if(finishingPinch) {event.preventDefault();event.stopPropagation();}
+        else if(['pan','zoom'].includes(gd.layout.dragmode)) event.stopPropagation();
+        return;
+    }
+    event.preventDefault();event.stopPropagation();
+    clearTimeout(profileTimer);
+    const point=touchGeometry(event.touches), x=gd._fullLayout.xaxis,y=gd._fullLayout[pinch.key];
+    const ratio=Math.max(.01,Math.min(100,pinch.distance/Math.max(10,point.distance)));
+    const width=Math.max(Math.min(10,records.length),Math.min(records.length+10,(pinch.xrange[1]-pinch.xrange[0])*ratio));
+    const xf=(point.x-x._offset)/x._length, yf=1-(point.y-y._offset)/y._length;
+    wheelTarget=boundedRange(pinch.xanchor-xf*width,width);
+    const height=(pinch.yrange[1]-pinch.yrange[0])*ratio;
+    verticalTargets[pinch.key]=[pinch.yanchor-yf*height,pinch.yanchor+(1-yf)*height];
+    if(!wheelFrame && !wheelDrawing) wheelFrame=requestAnimationFrame(renderWheel);
+},{passive:false,capture:true});
+function endPinch(event) {
+    if(finishingPinch) {event.stopPropagation();}
+    if(event.touches.length<2) pinch=null;
+    if(event.touches.length===0) finishingPinch=false;
+}
+gd.addEventListener('touchend',endPinch,{capture:true});
+gd.addEventListener('touchcancel',event=>{pinch=null;finishingPinch=false;},{capture:true});
 let resizeTimer;
 window.addEventListener('resize',()=>{
     clearTimeout(resizeTimer);
@@ -571,6 +617,7 @@ updateProfile([START, END]);
     #drawing-status {padding:2px 14px;font-size:11px;color:#94a3b8;}
     .axis-wheel-control {position:absolute;z-index:30;pointer-events:auto;cursor:ns-resize;background:transparent;touch-action:none;user-select:none;}
     .axis-wheel-control:hover,.axis-wheel-control.axis-dragging {background:rgba(96,165,250,.12);border-right:2px solid #60a5fa;}
+    #analysis-chart .nsewdrag {touch-action:pan-y;}
     .crosshair {position:absolute;pointer-events:none;z-index:20;display:none;}
     #cross-v {border-left:1px dashed #959eaf;}
     #cross-h {border-top:1px dashed #959eaf;}
