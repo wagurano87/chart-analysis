@@ -3,6 +3,7 @@ import json
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from analysis import MA_WINDOWS
 
 
 def chart_html(frame, timeframe, bins=32):
@@ -17,7 +18,8 @@ def chart_html(frame, timeframe, bins=32):
                                 close=frame.Close, text=dates, name=timeframe,
                                 increasing=dict(line=dict(color='#26a69a', width=2), fillcolor='#26a69a'),
                                 decreasing=dict(line=dict(color='#ef5350', width=2), fillcolor='#ef5350')), row=1, col=1)
-    for window, color in [(20, '#fbbf24'), (60, '#60a5fa'), (200, '#c084fc')]:
+    ma_colors = ['#34d399', '#fbbf24', '#60a5fa', '#fb923c', '#c084fc', '#f472b6']
+    for window, color in zip(MA_WINDOWS, ma_colors):
         fig.add_trace(go.Scatter(x=x, y=frame[f'MA{window}'], name=f'MA{window}',
                                 line=dict(color=color, width=2), customdata=dates,
                                 hovertemplate='%{customdata} MA'+str(window)+': %{y:.2f}<extra></extra>'), row=1, col=1)
@@ -67,14 +69,16 @@ def chart_html(frame, timeframe, bins=32):
         fig.update_yaxes(title_text=None, side='right', tickfont=dict(size=12, color='#cbd5e1'),
                          nticks=5, gridcolor='#242b38', fixedrange=False,
                          showspikes=False, zerolinecolor='#475569', row=row, col=1)
-    for row, title in [(1, f'{timeframe}  ·  MA20 / MA60 / MA200'), (2, '거래량'),
+    for row, title in [(1, f'{timeframe} 이동평균'), (2, '거래량'),
                        (3, 'MACD 6 · 19 · 9'), (4, 'MACD 19 · 39 · 9'), (5, 'RSI 14'), (6, 'OBV')]:
         axis = fig.layout['yaxis' if row == 1 else f'yaxis{row+1}']
         text = '<b>'+title+'</b>'
         if row in (3,4):
             text += '  <span style="color:#38bdf8">MACD</span>  <span style="color:#fb923c">Signal</span>'
         if row == 1:
-            text = '<b>'+timeframe+'</b>  <span style="color:#fbbf24">MA20</span>  <span style="color:#60a5fa">MA60</span>  <span style="color:#c084fc">MA200</span>'
+            text = '<b>'+timeframe+'</b>  ' + '  '.join(
+                f'<span style="color:{color}">MA{window}</span>'
+                for window, color in zip(MA_WINDOWS, ma_colors))
         fig.add_annotation(x=0, y=axis.domain[1], xref='paper', yref='paper', text=text,
                            showarrow=False, xanchor='left', yanchor='bottom', yshift=5,
                            font=dict(size=12,color='#e2e8f0'))
@@ -271,7 +275,7 @@ document.getElementById('reset-view').addEventListener('click',()=>{
 document.getElementById('toggle-ma').addEventListener('click',event=>{
     averagesVisible=!averagesVisible;
     event.currentTarget.setAttribute('aria-pressed',String(averagesVisible));
-    Plotly.restyle(gd,{visible:averagesVisible},[1,2,3]).then(()=>updateProfile(gd.layout.xaxis.range));
+    Plotly.restyle(gd,{visible:averagesVisible},gd.data.map((trace,i)=>/^MA[0-9]+$/.test(trace.name)?i:-1).filter(i=>i>=0)).then(()=>updateProfile(gd.layout.xaxis.range));
 });
 document.getElementById('save-image').addEventListener('click',()=>{
     Plotly.downloadImage(gd,{format:'png',filename:'chart-analysis',scale:2});
@@ -512,7 +516,7 @@ updateProfile([START, END]);
 '''
     values = frame[['Volume','MACD6','Signal6','Histogram6','MACD','Signal','Histogram','OBV','RSI','VolumeAvg20']].to_json(orient='values')
     script = (script.replace('RECORDS', json.dumps(records)).replace('OHLC', frame[['Open','High','Low','Close']].to_json(orient='values')).replace('SERIES',values).replace('DATES',json.dumps(dates))
-              .replace('AVERAGES', frame[['MA20','MA60','MA200']].to_json(orient='values'))
+              .replace('AVERAGES', frame[[f'MA{window}' for window in MA_WINDOWS]].to_json(orient='values'))
               .replace('BINS', str(int(bins))).replace('PROFILE',str(profile_index))
               .replace('START',str(start-.5)).replace('END',str(len(frame)-.5)))
     html = fig.to_html(full_html=True, include_plotlyjs=True, div_id='analysis-chart', post_script=script,

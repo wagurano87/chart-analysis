@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 
 
+MA_WINDOWS = (10, 20, 60, 120, 200, 365)
+
 def validate_prices(frame):
     frame = frame.copy()
     required = ["Open", "High", "Low", "Close", "Volume"]
@@ -61,7 +63,7 @@ def indicators(frame):
     result["Histogram6"] = result.MACD6 - result.Signal6
     result["RSI"] = rsi(close)
     result["OBV"] = (np.sign(close.diff()).fillna(0) * result.Volume).cumsum()
-    for window in (20, 60, 200):
+    for window in MA_WINDOWS:
         result[f"MA{window}"] = close.rolling(window).mean()
     # Compare against prior sessions: today's volume must not inflate its own baseline.
     result["VolumeAvg20"] = result.Volume.shift(1).rolling(20).mean()

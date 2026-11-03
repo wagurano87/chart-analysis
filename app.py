@@ -3,7 +3,7 @@
 import pandas as pd
 import streamlit as st
 
-from analysis import assess, completed_daily_bars, indicators, resample_bars
+from analysis import MA_WINDOWS, assess, completed_daily_bars, indicators, resample_bars
 from charts import chart_html
 from crypto_data import CRYPTO_MARKETS, crypto_symbol, quote_currency
 from symbol_search import render_symbol_search
@@ -148,7 +148,7 @@ with st.expander("거래량·이동평균 상세 분석"):
         st.write("거래량이 평소의 절반 미만입니다. 가격 움직임의 참여 강도가 약할 수 있습니다.")
     else:
         st.write("1.5배 이상 거래량 증가를 동반한 종가 하락 조건은 발생하지 않았습니다.")
-    for window in (20, 60, 200):
+    for window in MA_WINDOWS:
         average = last[f"MA{window}"]
         st.write(f"{window}{period} 이동평균: 데이터 부족" if pd.isna(average) else f"{window}{period} 이동평균 {average:,.2f} · 종가는 이동평균 {'위' if last.Close >= average else '아래'}")
 
