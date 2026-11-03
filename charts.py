@@ -135,7 +135,7 @@ function refreshMeasurements() {
                 const price=shape.y1+(shape.y0-shape.y1)*level;
                 annotations.push({name:`fib-${i}-${j}`,x:shape.x1,y:price,xref:shape.xref,yref:shape.yref,
                     ax:shape.x0,ay:price,axref:shape.xref,ayref:shape.yref,
-                    text:`${(level*100).toFixed(1)}% · ${number(price,8)}`,
+                    text:`${(level*100).toFixed(1)}% · ${number(price,Math.abs(price)>=1?2:8)}`,
                     showarrow:true,arrowhead:0,arrowwidth:1.5,arrowcolor:colors[j],
                     standoff:0,startstandoff:0,bgcolor:'#131722',borderpad:2,
                     font:{size:11,color:colors[j]},captureevents:false});
@@ -161,10 +161,24 @@ function showShapeSelection() {
     gd.querySelectorAll('.shape-group[data-index]').forEach(node=>{
         node.classList.toggle('selected-drawing', Number(node.dataset.index)===selectedShape);
     });
+    const picker=document.getElementById('drawing-picker');
+    const drawings=(gd.layout.shapes || []).slice(protectedShapeCount);
+    const signature=JSON.stringify(drawings.map(s=>[s.name,s.type]));
+    if(picker.dataset.signature!==signature) {
+        picker.replaceChildren(new Option('도형 선택', ''));
+        drawings.forEach((shape,i)=>{
+            const label=shape.name==='fibonacci'?'피보나치':shape.name==='measurement'?'측정':shape.type==='rect'?'사각형':'추세선';
+            picker.add(new Option(`${i+1}. ${label}`,String(i+protectedShapeCount)));
+        });
+        picker.dataset.signature=signature;
+    }
+    picker.value=selectedShape===null?'':String(selectedShape);
+    picker.disabled=!drawings.length;
+    document.getElementById('clear-drawings').disabled=!drawings.length || deletingShape;
     document.getElementById('delete-shape').disabled=selectedShape===null || deletingShape;
     document.getElementById('drawing-status').textContent=selectedShape===null
         ? '차트 휠: 시간축 확대 · 오른쪽 눈금 휠: 세로 확대 · Shift+휠: 좌우 이동 · 도형 선택 후 Del 삭제'
-        : '도형 선택됨 · Delete로 삭제 · Esc 선택 해제';
+        : '도형 선택됨 · 선택 삭제 버튼 또는 Delete로 삭제';
 }
 function selectShape(index) {
     selectedShape=Number.isInteger(index) && index>=protectedShapeCount &&
@@ -183,6 +197,7 @@ gd.on('plotly_afterplot',showShapeSelection);
 gd.on('plotly_relayout',event=>{
     if(!Object.keys(event).some(key=>key==='shapes' || key.startsWith('shapes['))) return;
     const count=(gd.layout.shapes || []).length;
+    const added=count>shapeCount;
     if(count>shapeCount) {
         if(fibonacci && gd.layout.shapes[count-1].yref==='y') {
             const shape=gd.layout.shapes[count-1];
@@ -200,6 +215,7 @@ gd.on('plotly_relayout',event=>{
         gd.focus({preventScroll:true});
     } else if(count<shapeCount) selectShape(null);
     shapeCount=count;
+    if(added) {measuring=false;fibonacci=false;Plotly.relayout(gd,{dragmode:'pan'});}
     showShapeSelection();
     refreshMeasurements();
 });
@@ -226,6 +242,15 @@ gd.addEventListener('keydown',event=>{
     }
 });
 document.getElementById('delete-shape').addEventListener('click',deleteSelectedShape);
+document.getElementById('drawing-picker').addEventListener('change',event=>{
+    selectShape(event.target.value===''?null:Number(event.target.value));
+});
+document.getElementById('clear-drawings').addEventListener('click',async()=>{
+    if(deletingShape) return;
+    deletingShape=true;selectShape(null);measuring=false;fibonacci=false;
+    try {await Plotly.relayout(gd,{shapes:(gd.layout.shapes || []).slice(0,protectedShapeCount),dragmode:'pan'});}
+    finally {deletingShape=false;showShapeSelection();}
+});
 showShapeSelection();
 const number = (n, digits=2) => n===null || !Number.isFinite(n) ? '—' :
     Number(n).toLocaleString('ko-KR',{maximumFractionDigits:digits});
@@ -603,7 +628,8 @@ updateProfile([START, END]);
     #chart-toolbar {display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;padding:6px 10px;background:#171c28;border-bottom:1px solid #2a3140;}
     #range-toolbar,#tools {display:flex;gap:3px;flex-wrap:wrap;}
     #tools {width:100%;border-top:1px solid #2a3140;padding-top:4px;}
-    #fib-tool {border:1px solid #60a5fa!important;color:#93c5fd!important;}
+    #drawing-picker {background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:4px;padding:6px;max-width:180px;}
+    @media(pointer:coarse){#chart-toolbar button,#drawing-picker{min-height:44px;}}
     #candle-readout {padding:8px 14px 2px;font-size:13px;line-height:1.7;font-variant-numeric:tabular-nums;min-height:32px;}
     #indicator-readout {padding:2px 14px;font-size:11px;color:#c4b5fd;line-height:1.7;min-height:23px;font-variant-numeric:tabular-nums;}
     #chart-toolbar button {background:transparent;color:#cbd5e1;border:1px solid transparent;border-radius:4px;padding:6px 9px;cursor:pointer;font-size:12px;}
@@ -636,7 +662,9 @@ updateProfile([START, END]);
     <button type="button" id="measure-tool" aria-pressed="false" title="시작 가격에서 끝 가격으로 드래그">측정 ↗</button>
     <button type="button" data-mode="drawline" aria-pressed="false">추세선</button>
     <button type="button" data-mode="drawrect" aria-pressed="false">사각형</button>
-    <button type="button" id="delete-shape" disabled title="선택한 도형 삭제 (Delete)">지우기 · Del</button>
+    <button type="button" id="delete-shape" disabled title="선택한 도형 삭제 (Delete)">선택 삭제</button>
+    <select id="drawing-picker" aria-label="삭제할 도형 선택"><option value="">도형 선택</option></select>
+    <button type="button" id="clear-drawings" disabled title="직접 그린 도형만 모두 삭제">도형 전체 삭제</button>
     <button type="button" id="toggle-ma" aria-pressed="true" title="이동평균선 표시 전환">MA</button>
     <button type="button" id="fit-price" title="표시 구간에 세로 눈금 맞추기">세로 맞춤</button>
     <button type="button" id="reset-view" title="최근 60봉과 자동 눈금으로 돌아가기">기본 보기</button>
