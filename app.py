@@ -5,11 +5,12 @@ import streamlit as st
 
 from analysis import assess, completed_daily_bars, indicators, resample_bars
 from charts import chart_html
+from crypto_data import CRYPTO_MARKETS, crypto_symbol, quote_currency
 from symbol_search import render_symbol_search
 from data import demo_prices, fetch_prices, read_csv, symbols
 
 st.set_page_config(page_title="차트 분석 · Dual MACD", layout="wide")
-st.title("한국·미국 주식 차트 분석")
+st.title("주식·코인 차트 분석")
 st.caption("일봉·주봉 · MACD 6/19/9 + 19/39/9 · RSI · OBV · VRVP · 분석 결과는 자동 주문이나 수익 보장이 아닙니다.")
 st.markdown("""<style>
 [data-testid="stMainBlockContainer"] {padding-top:3.5rem;padding-bottom:2rem;}
@@ -33,10 +34,11 @@ with st.sidebar:
     st.header("분석 대상")
     with st.form("request"):
         mode = st.selectbox("데이터", ["온라인 시세", "CSV 업로드", "가상 데이터 체험"])
-        market = st.selectbox("시장", ["한국", "미국"], key="analysis_market")
-        ticker = st.text_input("한국 6자리 코드 / 미국 티커", key="analysis_ticker")
+        market = st.selectbox("시장", ["한국", "미국", "바이낸스", "업비트"], key="analysis_market")
+        ticker = st.text_input("종목 코드 / 티커 / 코인 거래쌍", key="analysis_ticker")
         uploaded = st.file_uploader("CSV: Date, Open, High, Low, Close, Volume", type="csv")
         submitted = st.form_submit_button("분석하기", type="primary")
+    st.caption("바이낸스: BTCUSDT, ETHUSDT · 업비트: KRW-BTC, KRW-ETH (현물)")
     render_symbol_search()
     st.caption("한국: 005930(삼성전자), 000660(SK하이닉스)\n\n미국: AAPL·NVDA(NASDAQ), IBM(NYSE)")
     bins = st.select_slider("VRVP 가격 구간 수", options=[16, 24, 32, 48, 64], value=32)
@@ -50,7 +52,7 @@ if submitted:
             elif mode == "CSV 업로드":
                 if uploaded is None:
                     raise ValueError("CSV 파일을 선택하세요.")
-                _, tv_symbol = symbols(ticker, market)
+                tv_symbol = crypto_symbol(ticker, market) if market in CRYPTO_MARKETS else symbols(ticker, market)[1]
                 raw, provider = read_csv(uploaded), "사용자 CSV · 수정주가 여부는 파일 제공 기준"
             else:
                 raw, provider, tv_symbol = load_prices(ticker, market)
@@ -104,15 +106,18 @@ with st.expander("차트 조작·데이터 안내"):
     st.write("분홍색 ▼: MACD(19,39,9) 0선 상향 돌파 후 양수 유지 중 오실레이터(MACD−시그널선)가 음수로 바뀐 봉. 가격·MACD 패널에 함께 표시합니다.")
     if removed:
         st.caption(f"당일 장중·미래 데이터 {removed}개는 분석에서 제외했습니다.")
-    st.caption("당일 일봉은 한국 16:00 / 미국 동부 17:00 이후에만 포함합니다. 제공처 지연·휴장·반일장은 별도로 확인하세요. 실시간 알림이 아니라 실행 시점의 마지막 완료 봉 분석입니다.")
-    if timeframe == "주봉":
+    if market in CRYPTO_MARKETS:
+        st.caption("코인 일봉은 UTC 00:00~24:00(한국 09:00 기준), 주봉은 UTC 월~일입니다. 진행 중인 일봉·주봉은 제외합니다. 거래 없는 날짜는 거래소가 제공하지 않을 수 있습니다.")
+    else:
+        st.caption("당일 일봉은 한국 16:00 / 미국 동부 17:00 이후에만 포함합니다. 제공처 지연·휴장·반일장은 별도로 확인하세요. 실시간 알림이 아니라 실행 시점의 마지막 완료 봉 분석입니다.")
+    if timeframe == "주봉" and market not in CRYPTO_MARKETS:
         st.caption("주봉은 월~금 일봉을 합산하고 금요일을 날짜로 표시합니다. 해당 시장 금요일 마감 대기 시각 전에는 이번 주를 제외합니다. 휴일 주간도 금요일까지 기다리며 첫 불완전 주는 제외합니다.")
 with st.expander("경고 근거 보기"):
     for reason in signal["reasons"]:
         st.write("• " + reason)
 
 columns = st.columns(4)
-columns[0].metric(("종가 (KRW)" if market == "한국" else "종가 (USD)") if tv_symbol else "가상 종가", f"{last.Close:,.2f}", f"{(last.Close / prev.Close - 1) * 100:+.2f}%")
+columns[0].metric((f"종가 ({quote_currency(ticker,market)})" if market in CRYPTO_MARKETS else "종가 (KRW)" if market == "한국" else "종가 (USD)") if tv_symbol else "가상 종가", f"{last.Close:,.2f}", f"{(last.Close / prev.Close - 1) * 100:+.2f}%")
 columns[1].metric("MACD (19,39)", f"{last.MACD:,.4f}", f"{last.MACD - prev.MACD:+.4f}", delta_color="off")
 columns[2].metric("시그널 (9)", f"{last.Signal:,.4f}")
 columns[3].metric("직전 20봉 평균 대비 거래량", "계산 불가" if pd.isna(last.VolumeRatio) else f"{last.VolumeRatio:.2f}배")
@@ -159,4 +164,7 @@ with st.expander("위험 신호 계산 기준과 한계"):
 st.download_button("분석 데이터 CSV 저장", frame.to_csv(index_label="Date").encode("utf-8-sig"), file_name=f"chart-analysis-{timeframe}.csv", mime="text/csv")
 
 from fundamentals import render_fundamentals
-render_fundamentals(provider, mode)
+if market not in CRYPTO_MARKETS:
+    render_fundamentals(provider, mode)
+else:
+    st.caption("코인은 기업 분기 재무제표·PEG 분석 대상이 아닙니다. 거래량은 기준 코인 수량입니다.")

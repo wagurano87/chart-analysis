@@ -32,6 +32,10 @@ def validate_prices(frame):
 
 def completed_daily_bars(frame, market, now=None):
     """Conservatively omit today's daily bar until after regular-session close."""
+    if market in {'바이낸스','업비트'}:
+        today=pd.Timestamp(now or datetime.now(ZoneInfo('UTC')))
+        today=today.tz_localize('UTC') if today.tzinfo is None else today.tz_convert('UTC')
+        return frame.loc[frame.index < today.tz_localize(None).normalize()].copy()
     zone = ZoneInfo("Asia/Seoul" if market == "한국" else "America/New_York")
     local_now = (now or datetime.now(zone)).astimezone(zone)
     # Allow for provider publishing lag. US half-day bars wait until this cutoff too.
@@ -110,6 +114,18 @@ def resample_bars(daily, market, timeframe, now=None):
         raise ValueError("지원하지 않는 주기입니다.")
     if daily.empty:
         return daily.copy()
+    if market in {'바이낸스','업비트'}:
+        daily=completed_daily_bars(daily,market,now)
+        if daily.empty: return daily.copy()
+        weekly=daily.resample('W-SUN').agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'}).dropna()
+        current=pd.Timestamp(now or datetime.now(ZoneInfo('UTC')))
+        current=current.tz_localize('UTC') if current.tzinfo is None else current.tz_convert('UTC')
+        today=current.tz_localize(None).normalize()
+        weekly=weekly.loc[weekly.index < today]
+        first_monday=daily.index.min().to_period('W-SUN').start_time
+        if daily.index.min()>first_monday:
+            weekly=weekly.loc[weekly.index>=first_monday+pd.Timedelta(days=7)]
+        return weekly
     zone = ZoneInfo("Asia/Seoul" if market == "한국" else "America/New_York")
     local = (now or datetime.now(zone)).astimezone(zone)
     cutoff = time(16) if market == "한국" else time(17)

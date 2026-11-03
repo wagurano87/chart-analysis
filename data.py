@@ -21,6 +21,9 @@ def symbols(value, market, exchange="NASDAQ"):
 
 
 def fetch_prices(value, market, exchange):
+    from crypto_data import CRYPTO_MARKETS, fetch_crypto
+    if market in CRYPTO_MARKETS:
+        return fetch_crypto(value, market)
     import yfinance as yf
 
     candidates, tv_symbol = symbols(value, market, exchange)
