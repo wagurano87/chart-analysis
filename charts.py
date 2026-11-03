@@ -65,7 +65,7 @@ def chart_html(frame, timeframe, bins=32):
                          showgrid=True, gridcolor='#242b38', row=row, col=1)
     for row, title in [(1, '가격'), (2, '거래량'), (3, 'MACD 6·19·9'), (4, 'MACD 19·39·9'), (5, 'RSI 14'), (6, 'OBV')]:
         fig.update_yaxes(title_text=None, side='right', tickfont=dict(size=12, color='#cbd5e1'),
-                         nticks=5, gridcolor='#242b38', fixedrange=True,
+                         nticks=5, gridcolor='#242b38', fixedrange=False,
                          showspikes=False, zerolinecolor='#475569', row=row, col=1)
     for row, title in [(1, f'{timeframe}  ·  MA20 / MA60 / MA200'), (2, '거래량'),
                        (3, 'MACD 6 · 19 · 9'), (4, 'MACD 19 · 39 · 9'), (5, 'RSI 14'), (6, 'OBV')]:
@@ -521,7 +521,7 @@ updateProfile([START, END]);
     <button type="button" data-count="180" aria-pressed="false">최근 180봉</button>
     <button type="button" data-count="all" aria-pressed="false">전체</button>
     </nav><nav id="tools" aria-label="차트 조작 도구">
-    <button type="button" data-mode="pan" aria-pressed="true" title="드래그로 차트 이동">이동</button>
+    <button type="button" data-mode="pan" aria-pressed="true" title="차트 안에서 상하좌우 드래그로 이동">이동</button>
     <button type="button" data-mode="zoom" aria-pressed="false" title="드래그한 구간 확대">확대</button>
     <button type="button" id="measure-tool" aria-pressed="false" title="시작 가격에서 끝 가격으로 드래그">측정 ↗</button>
     <button type="button" data-mode="drawline" aria-pressed="false">추세선</button>
