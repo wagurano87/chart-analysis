@@ -20,7 +20,7 @@ class SearchTests(unittest.TestCase):
     def test_apply_updates_market_and_ticker(self):
         app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py')).run()
         app.text_input[1].set_value('엔비디아')
-        app.button[1].click().run()
+        next(b for b in app.button if b.label == "종목 검색").click().run()
         next(b for b in app.button if b.label=='선택 종목 입력').click().run()
         self.assertFalse(app.exception)
         self.assertEqual(app.text_input(key='analysis_ticker').value,'NVDA')

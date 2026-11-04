@@ -29,7 +29,7 @@ class FinancialTests(unittest.TestCase):
         frame=pd.DataFrame({'매출액':[100e6]*8,'영업이익':[10e6]*8,'영업이익률':[10.0]*8},index=dates)
         with patch('market_data.fetch_prices',return_value=(demo_prices(),'TEST.KS','KRX:TEST')), patch('fundamentals.fetch_fundamentals',return_value=(frame,'KRW',1.2)):
             app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py'),default_timeout=30).run()
-            app.button[0].click().run()
+            next(b for b in app.button if b.label == "분석하기").click().run()
             app.button(key='load_financials').click().run()
             self.assertEqual(len(app.exception),0)
             self.assertEqual(len(app.get('plotly_chart')),4)

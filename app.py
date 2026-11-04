@@ -29,10 +29,26 @@ def load_prices(ticker, market):
 
 st.session_state.setdefault("analysis_ticker", "005930")
 
+
+def open_favorite(symbol):
+    st.session_state['analysis_mode'] = '온라인 시세'
+    st.session_state['analysis_market'] = '바이낸스'
+    st.session_state['analysis_ticker'] = symbol
+    st.session_state['favorite_requested'] = True
+
+
+st.caption('바이낸스 현물 빠른 조회 · USDT 기준')
+favorites = st.columns(2)
+favorites[0].button('₿ 비트코인', key='favorite_btc', on_click=open_favorite,
+                    args=('BTCUSDT',), width='stretch')
+favorites[1].button('◆ 이더리움', key='favorite_eth', on_click=open_favorite,
+                    args=('ETHUSDT',), width='stretch')
+
+
 with st.sidebar:
     st.header("분석 대상")
     with st.form("request"):
-        mode = st.selectbox("데이터", ["온라인 시세", "CSV 업로드", "가상 데이터 체험"])
+        mode = st.selectbox("데이터", ["온라인 시세", "CSV 업로드", "가상 데이터 체험"], key="analysis_mode")
         market = st.selectbox("시장", ["한국", "미국", "바이낸스", "업비트"], key="analysis_market")
         ticker = st.text_input("종목 코드 / 티커 / 코인 거래쌍", key="analysis_ticker")
         uploaded = st.file_uploader("CSV: Date, Open, High, Low, Close, Volume", type="csv")
@@ -43,7 +59,8 @@ with st.sidebar:
     bins = st.select_slider("VRVP 가격 구간 수", options=[16, 24, 32, 48, 64], value=32)
     st.caption("CSV는 일봉을 입력하세요. 주봉은 일봉에서 합산합니다.")
 
-if submitted:
+favorite_requested = st.session_state.pop("favorite_requested", False)
+if submitted or favorite_requested:
     try:
         with st.spinner("일봉 데이터를 준비하고 분석하는 중입니다…"):
             if mode == "가상 데이터 체험":
