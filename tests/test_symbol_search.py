@@ -5,6 +5,12 @@ from symbol_search import search_symbols, normalize_quotes
 from streamlit.testing.v1 import AppTest
 
 class SearchTests(unittest.TestCase):
+    def setUp(self):
+        directory = patch('symbol_search.get_directory', return_value=(
+            [{'name': '목록테스트기업', 'code': '123456', 'exchange': '코스닥'}], 'KIND 테스트 목록'))
+        directory.start()
+        self.addCleanup(directory.stop)
+
     def test_korean_alias_offline(self):
         with patch('yfinance.Search',side_effect=AssertionError('offline')):
             result,_=search_symbols('삼성전자')
@@ -29,7 +35,7 @@ class SearchTests(unittest.TestCase):
         self.assertEqual([v[1] for v in result],['000660','TEST'])
     def test_apply_updates_market_and_ticker(self):
         app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py')).run()
-        for query, code, market in [('인텔', 'INTC', '미국'), ('삼성전자 ·', '005930', '한국'), ('엘앤씨바이오 ·', '290650', '한국'), ('LG전자 ·', '066570', '한국')]:
+        for query, code, market in [('인텔', 'INTC', '미국'), ('삼성전자 ·', '005930', '한국'), ('엘앤씨바이오 ·', '290650', '한국'), ('LG전자 ·', '066570', '한국'), ('목록테스트기업 ·', '123456', '한국')]:
             picker=app.selectbox(key='symbol_entry')
             label=next(v for v in picker.options if v.startswith(query))
             picker.select(label).run()

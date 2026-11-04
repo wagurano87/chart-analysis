@@ -1,5 +1,6 @@
 """Small offline alias list plus Yahoo search for other listed instruments."""
 import re
+from korean_listings import get_directory
 
 COMMON = [
     ('엘앤씨바이오', '290650', '한국', 'L&C Bio 엘앤씨 바이오'),
@@ -56,6 +57,11 @@ def search_symbols(query):
            if any(key in compact(v) for v in (name,code,alias))]
     if local:
         return local, '기본 종목 목록 · 이름과 코드를 확인하고 선택하세요.'
+    directory, _ = get_directory()
+    domestic = [(row['name'], row['code'], '한국', row['exchange']) for row in directory
+                if key in compact(row['name']) or key in row['code']]
+    if domestic:
+        return domestic, 'KIND 국내 상장사 목록'
     import yfinance as yf
     try:
         results=normalize_quotes(yf.Search(query,max_results=20,news_count=0,timeout=10).quotes)
@@ -69,6 +75,10 @@ def render_symbol_picker():
     import streamlit as st
     entries = {f'{name} · {alias} · {code} · {market}': (code, market)
                for name, code, market, alias in COMMON}
+    directory, _ = get_directory()
+    known = {code for _, code, market, _ in COMMON if market == '한국'}
+    entries.update({f"{row['name']} · {row['code']} · 한국 · {row['exchange']}": (row['code'], '한국')
+                    for row in directory if row['code'] not in known})
     entries.update({f'{code} · {market}': (code, market)
                     for code, market in [('BTCUSDT', '바이낸스'), ('ETHUSDT', '바이낸스'),
                                          ('KRW-BTC', '업비트'), ('KRW-ETH', '업비트')]})
@@ -121,6 +131,16 @@ def render_symbol_picker():
                  key='symbol_entry', accept_new_options=True, on_change=select,
                  placeholder='삼성전자, 인텔, AAPL, BTCUSDT',
                  help='이름을 입력해 후보를 선택하세요. 목록에 없는 종목은 입력 후 Enter로 검색합니다.')
+    @st.fragment(run_every='30s')
+    def directory_status():
+        latest, message = get_directory()
+        if latest != directory:
+            st.rerun()
+        st.caption(message)
+        if st.button('목록 갱신 확인', key='check_listing_refresh'):
+            st.rerun()
+
+    directory_status()
     if st.session_state.get('symbol_picker_message'):
         st.caption(st.session_state['symbol_picker_message'])
     st.caption(f"선택 종목: {st.session_state['analysis_ticker']} · {st.session_state.get('analysis_market', '한국')}")

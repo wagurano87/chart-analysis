@@ -8,6 +8,12 @@ APP = str(Path(__file__).resolve().parents[1] / "app.py")
 
 
 class AppTests(unittest.TestCase):
+    def setUp(self):
+        directory = patch('symbol_search.get_directory', return_value=(
+            [{'name': '목록테스트기업', 'code': '123456', 'exchange': '코스닥'}], 'KIND 테스트 목록'))
+        directory.start()
+        self.addCleanup(directory.stop)
+
     def test_binance_favorites_apply_and_analyze(self):
         with patch('market_data.fetch_prices', return_value=(demo_prices(), '바이낸스', 'BTCUSDT')) as fetch:
             app = AppTest.from_file(APP, default_timeout=30).run()
