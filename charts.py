@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 from analysis import MA_WINDOWS
 
 
-def chart_html(frame, timeframe, bins=32, adx_threshold=20):
+def chart_figure(frame, timeframe, bins=32, adx_threshold=20):
     x = list(range(len(frame)))
     dates = frame.index.strftime('%Y-%m-%d %H:%M' if timeframe=='4시간봉' else '%Y-%m-%d').tolist()
     fig = make_subplots(rows=7, cols=2, shared_xaxes=True, shared_yaxes=True,
@@ -107,7 +107,7 @@ def chart_html(frame, timeframe, bins=32, adx_threshold=20):
     last_color = '#26a69a' if frame.Close.iloc[-1] >= frame.Close.iloc[-2] else '#ef5350'
     fig.add_shape(type='line', xref='x domain', x0=0, x1=1, yref='y',
                   y0=float(frame.Close.iloc[-1]), y1=float(frame.Close.iloc[-1]),
-                  line=dict(color=last_color, width=1, dash='dot'), editable=False)
+                  line=dict(color=last_color, width=1, dash='dot'), editable=False, name='last-close-line')
     fig.add_annotation(x=1, xref='x domain', y=float(frame.Close.iloc[-1]), yref='y',
                        text=f'{frame.Close.iloc[-1]:,.2f}', showarrow=False, xanchor='left',
                        bgcolor=last_color, borderpad=4, font=dict(color='white', size=12),
@@ -123,6 +123,29 @@ def chart_html(frame, timeframe, bins=32, adx_threshold=20):
                       xaxis_rangeslider_visible=False, showlegend=False, font=dict(family='Arial, sans-serif',size=12,color='#cbd5e1'),
                       hoverlabel=dict(bgcolor='#222b3b',font_size=13),
                       newshape=dict(line_color='#eab308'), uirevision='chart')
+    return fig
+
+
+SERIES_COLUMNS = ['Volume','MACD6','Signal6','Histogram6','MACD','Signal','Histogram','OBV','RSI','VolumeAvg20','PlusDI','MinusDI','ADX','ADXR']
+
+
+def live_payload(frame, timeframe, bins=32, adx_threshold=20):
+    fig = chart_figure(frame, timeframe, bins, adx_threshold)
+    return {
+        'traces': json.loads(fig.to_json())['data'],
+        'records': json.loads(frame[['Low','High','Volume']].to_json(orient='values')),
+        'ohlc': json.loads(frame[['Open','High','Low','Close']].to_json(orient='values')),
+        'series': json.loads(frame[SERIES_COLUMNS].to_json(orient='values')),
+        'averages': json.loads(frame[[f'MA{window}' for window in MA_WINDOWS]].to_json(orient='values')),
+        'dates': frame.index.strftime('%Y-%m-%d %H:%M' if timeframe=='4시간봉' else '%Y-%m-%d').tolist(),
+    }
+
+
+def chart_html(frame, timeframe, bins=32, adx_threshold=20, live_token=None):
+    fig = chart_figure(frame, timeframe, bins, adx_threshold)
+    dates = frame.index.strftime('%Y-%m-%d %H:%M' if timeframe=='4시간봉' else '%Y-%m-%d').tolist()
+    start = max(0, len(frame) - 60)
+    profile_index = next(i for i, trace in enumerate(fig.data) if trace.name == 'VRVP 추정')
     records = frame[['Low','High','Volume']].to_numpy().tolist()
     script = r'''
 const gd = document.getElementById('analysis-chart');
@@ -625,7 +648,7 @@ function fitChartFrame() {
     });
 }
 const headerObserver=new ResizeObserver(fitChartFrame);
-for(const id of ['chart-toolbar','candle-readout','indicator-readout','drawing-status']) headerObserver.observe(document.getElementById(id));
+for(const id of ['chart-toolbar','candle-readout','indicator-readout','drawing-status','live-status']) headerObserver.observe(document.getElementById(id));
 fitChartFrame();
 let resizeTimer;
 window.addEventListener('resize',()=>{
@@ -634,12 +657,61 @@ window.addEventListener('resize',()=>{
     resizeTimer=setTimeout(()=>scheduleProfile(gd.layout.xaxis.range),200);
 });
 updateProfile([START, END]);
+const liveToken = LIVE_TOKEN;
+let pendingLive=null, applyingLive=false;
+window.addEventListener('message', event=>{
+    const data=event.data;
+    if(!liveToken || !data || data.type!=='chart-live' || data.token!==liveToken) return;
+    pendingLive=data;
+    event.source?.postMessage({type:'chart-live-ack',token:liveToken},'*');
+});
+async function applyLive() {
+    if(!pendingLive || applyingLive || busy || wheelDrawing || pinch || gd._dragging) return;
+    const data=pendingLive;
+    pendingLive=null;
+    const status=document.getElementById('live-status');
+    if(data.error) {status.textContent=data.error;return;}
+    const next=data.payload;
+    if(!next || !next.dates.length || next.traces.length!==gd.data.length) return;
+    applyingLive=true;
+    busy=true;
+    try {
+        const oldLength=records.length;
+        const layout={...gd.layout};
+        // Keep the user's shapes, annotations and explicit viewport ranges.
+        layout.annotations=(gd.layout.annotations||[]).map(a=>({...a}));
+        layout.shapes=(gd.layout.shapes||[]).map(a=>({...a}));
+        const price=next.ohlc[next.ohlc.length-1][3];
+        const color=price>=next.ohlc[next.ohlc.length-1][0]?'#26a69a':'#ef5350';
+        const label=layout.annotations.find(a=>a.name==='last-close');
+        if(label) {label.y=price;label.text=number(price);label.bgcolor=color;}
+        const line=layout.shapes.find(a=>a.name==='last-close-line');
+        if(line) {line.y0=price;line.y1=price;line.line={...line.line,color};}
+        const delta=next.records.length-oldLength;
+        if(delta>0 && gd.layout.xaxis.range[1]>=oldLength-1) {
+            for(const axis of timeAxes) layout[axis]={...layout[axis],range:layout[axis].range.map(v=>v+delta)};
+        }
+        next.traces[profileIndex]=gd.data[profileIndex];
+        next.traces.forEach((trace,i)=>{if(/^MA[0-9]+$/.test(trace.name)) trace.visible=averagesVisible;});
+        for(const [target,source] of [[records,next.records],[ohlc,next.ohlc],[series,next.series],[averages,next.averages],[dates,next.dates]]) {
+            target.splice(0,target.length,...source);
+        }
+        await Plotly.react(gd,next.traces,layout,gd._context);
+        status.textContent=data.status;
+        showCandle(records.length-1);
+        scheduleProfile(gd.layout.xaxis.range);
+    } catch(error) {
+        status.textContent='차트 갱신 실패 · 다음 주기에 재시도합니다.';
+    } finally {busy=false;applyingLive=false;}
+}
+if(liveToken) setInterval(applyLive,100);
+
 '''
-    values = frame[['Volume','MACD6','Signal6','Histogram6','MACD','Signal','Histogram','OBV','RSI','VolumeAvg20','PlusDI','MinusDI','ADX','ADXR']].to_json(orient='values')
+    values = frame[SERIES_COLUMNS].to_json(orient='values')
     script = (script.replace('RECORDS', json.dumps(records)).replace('OHLC', frame[['Open','High','Low','Close']].to_json(orient='values')).replace('SERIES',values).replace('DATES',json.dumps(dates))
               .replace('AVERAGES', frame[[f'MA{window}' for window in MA_WINDOWS]].to_json(orient='values'))
               .replace('ADX_THRESHOLD', str(float(adx_threshold))).replace('BINS', str(int(bins))).replace('PROFILE',str(profile_index))
-              .replace('START',str(start-.5)).replace('END',str(len(frame)-.5)))
+              .replace('LIVE_TOKEN',json.dumps(live_token)).replace('START',str(start-.5)).replace('END',str(len(frame)-.5)))
     html = fig.to_html(full_html=True, include_plotlyjs=True, div_id='analysis-chart', post_script=script,
                        config={'scrollZoom':False,'displaylogo':False,'responsive':True,'displayModeBar':False,
                                'modeBarButtonsToAdd':['drawline','drawrect','eraseshape'], 'toImageButtonOptions':{'filename':'chart-analysis'}})
@@ -691,5 +763,5 @@ updateProfile([START, END]);
     <button type="button" id="fit-price" title="표시 구간에 세로 눈금 맞추기">세로 맞춤</button>
     <button type="button" id="reset-view" title="최근 60봉과 자동 눈금으로 돌아가기">기본 보기</button>
     <button type="button" id="save-image" title="차트를 PNG 이미지로 저장">PNG 저장</button>
-    </nav></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="drawing-status" role="status"></div>'''
+    </nav></div><div id="live-status" style="font-size:11px;color:#94a3b8;padding:0 14px" role="status"></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="drawing-status" role="status"></div>'''
     return html.replace('<body>', '<body style="margin:0;background:#131722;color:#cbd5e1;font-family:sans-serif">'+toolbar)

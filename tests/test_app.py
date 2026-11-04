@@ -9,6 +9,9 @@ APP = str(Path(__file__).resolve().parents[1] / "app.py")
 
 class AppTests(unittest.TestCase):
     def setUp(self):
+        live = patch("live_crypto.render_live_updates")
+        live.start()
+        self.addCleanup(live.stop)
         directory = patch('symbol_search.get_directory', return_value=(
             [{'name': '목록테스트기업', 'code': '123456', 'exchange': '코스닥'}], 'KIND 테스트 목록'))
         us_directory = patch('symbol_search.get_us_directory', return_value=(

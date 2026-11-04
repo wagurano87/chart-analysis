@@ -142,7 +142,17 @@ with summary:
 
 from charts import chart_html
 
-st.iframe(chart_html(frame, timeframe, bins, adx_threshold), height=1510)
+live_enabled = market in CRYPTO_MARKETS and mode == '온라인 시세' and st.toggle('코인 10초 자동 갱신', value=True, key='crypto_live_enabled')
+live_token = None
+if live_enabled:
+    from uuid import uuid4
+    live_token = uuid4().hex
+    st.caption('차트는 진행 중인 봉까지 갱신합니다. 시그널은 봉 마감 후 확정됩니다. 차트 밖 요약·내역·CSV는 분석하기를 누른 시점 기준입니다.')
+st.iframe(chart_html(frame, timeframe, bins, adx_threshold, live_token=live_token), height=1510)
+if live_enabled:
+    from live_crypto import render_live_updates
+    render_live_updates(intraday if timeframe == '4시간봉' else daily, ticker, market, timeframe,
+                        bins, adx_threshold, (di_length, adx_length, adxr_length), live_token)
 st.caption(f'ADX·ADXR·DI 설정: DI {di_length} / ADX {adx_length} / ADXR {adxr_length} / 기준선 {adx_threshold}. +DI·−DI는 방향, ADX·ADXR은 추세 강도 참고 지표이며 기존 매도 경고와 독립적입니다.')
 st.caption("▲ DI 매수 시그널 · ▼ 매도 주의 시그널 · 우측 VRVP는 표시 구간의 OHLCV로 추정한 거래량 분포이며 노란 막대는 추정 POC입니다.")
 sell_events = frame.loc[frame.MACD19SellSignal]
