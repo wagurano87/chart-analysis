@@ -27,17 +27,21 @@ def fetch_prices(value, market, exchange):
     import yfinance as yf
 
     candidates, tv_symbol = symbols(value, market, exchange)
+    connection_error = None
     for symbol in candidates:
         try:
             frame = yf.download(symbol, period="5y", interval="1d", auto_adjust=True,
                                 progress=False, threads=False, timeout=15)
         except Exception as error:
-            raise RuntimeError("시세 제공처에 연결할 수 없습니다. 네트워크 상태를 확인하거나 CSV를 사용하세요.") from error
+            connection_error = error
+            continue
         if frame.empty:
             continue
         if isinstance(frame.columns, pd.MultiIndex):
             frame.columns = frame.columns.get_level_values(0)
         return prepare_online_prices(frame), symbol, tv_symbol
+    if connection_error is not None:
+        raise RuntimeError("시세 제공처에 연결할 수 없습니다. 네트워크 상태를 확인하거나 CSV를 사용하세요.") from connection_error
     raise ValueError("일봉을 받지 못했습니다. 종목코드, 제공처 장애 또는 네트워크 제한을 확인하세요. CSV 입력도 지원합니다.")
 
 

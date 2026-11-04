@@ -1,25 +1,13 @@
 """Daily Nasdaq Trader US exchange directory, retaining last successful cache."""
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 import csv
 import io
-import json
 from pathlib import Path
 import re
-from threading import Lock
+from listing_cache import ListingCache, validate_timestamp
 import time
-from zoneinfo import ZoneInfo
 from urllib.request import Request, urlopen
 
 CACHE = Path(__file__).resolve().parent / '.cache' / 'us_listings.json'
-DAY = 86400
-RETRY = 3600
-_lock = Lock()
-_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='us-listings')
-_future = None
-_last_attempt = 0
-_snapshot = None
-_failed = False
 EXCHANGES = {'N': 'NYSE', 'A': 'NYSE American', 'P': 'NYSE Arca',
              'Z': 'Cboe BZX', 'V': 'IEX'}
 
@@ -52,8 +40,7 @@ def parse_listing(payload, nasdaq):
 
 
 def validate_snapshot(data):
-    if not isinstance(data, dict) or not isinstance(data.get('updated_at'), (int, float)):
-        raise ValueError('Invalid US directory cache')
+    validate_timestamp(data)
     seen = set()
     counts = {'NASDAQ': 0, 'other': 0}
     for row in data.get('rows', []):
@@ -80,54 +67,8 @@ def download_snapshot():
     return validate_snapshot({'updated_at': time.time(), 'rows': list(combined.values())})
 
 
-def refresh():
-    global _snapshot, _failed
-    try:
-        data = download_snapshot()
-        CACHE.parent.mkdir(parents=True, exist_ok=True)
-        temporary = CACHE.with_suffix('.tmp')
-        temporary.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
-        temporary.replace(CACHE)
-        with _lock:
-            _snapshot, _failed = data, False
-    except Exception:
-        # Keep the last valid directory; retry is throttled in get_directory().
-        with _lock:
-            _failed = True
+_cache = ListingCache(CACHE, download_snapshot, validate_snapshot, '미국 상장 종목 · Nasdaq Trader')
 
 
 def get_directory():
-    """Check age on app interaction; refresh in background, at most once/day.
-
-    After a failed refresh retry after one hour. Disk cache survives app reruns
-    and process restarts, but Streamlit redeploys may remove the local disk.
-    """
-    global _snapshot, _future, _last_attempt
-    now = time.time()
-    with _lock:
-        if _snapshot is None:
-            try:
-                _snapshot = validate_snapshot(json.loads(CACHE.read_text(encoding='utf-8')))
-            except (OSError, ValueError, TypeError, KeyError, AttributeError):
-                _snapshot = {'updated_at': 0, 'rows': []}
-        stale = now - _snapshot['updated_at'] >= DAY
-        running = _future is not None and not _future.done()
-        if stale and not running and now - _last_attempt >= RETRY:
-            _last_attempt = now
-            _future = _executor.submit(refresh)
-            running = True
-        rows = list(_snapshot['rows'])
-        stamp = _snapshot['updated_at']
-        if stamp:
-            date = datetime.fromtimestamp(stamp, timezone.utc).astimezone(
-                ZoneInfo('Asia/Seoul')).strftime('%Y-%m-%d %H:%M')
-            message = f'미국 상장 종목 {len(rows):,}개 · Nasdaq Trader · 갱신 {date} (한국 시간)'
-            if stale:
-                message += ' · 이전 목록 사용 중'
-        else:
-            message = '미국 전체 목록 준비 중 · 현재 기본 종목만 표시합니다.'
-        if _failed:
-            message += ' · 갱신 연결 실패, 1시간 후 다음 이용 시 재시도'
-        elif running:
-            message += ' · 백그라운드 갱신 중 · 완료 후 자동 반영됩니다.'
-        return rows, message
+    return _cache.get()

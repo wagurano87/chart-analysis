@@ -59,3 +59,12 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(app.session_state['analysis_ticker'], 'EXM')
         self.assertEqual(app.selectbox(key='analysis_market').value, '미국')
         self.assertFalse(next(b for b in app.button if b.label == '분석하기').disabled)
+
+    def test_alias_match_does_not_hide_directory_candidates(self):
+        with patch('symbol_search.get_directory', return_value=([
+            {'name': '삼성전자', 'code': '005930', 'exchange': '코스피'},
+            {'name': '삼성테스트', 'code': '123450', 'exchange': '코스닥'}], '목록')):
+            matches, _ = search_symbols('삼성')
+        codes = [row[1] for row in matches]
+        self.assertEqual(codes.count('005930'), 1)
+        self.assertIn('123450', codes)

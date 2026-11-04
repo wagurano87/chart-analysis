@@ -367,9 +367,8 @@ function updateProfile(range, fitPrice=true) {
     });
     if (!visible.length) {
         window.__volumeProfile = {first:lo,last:hi,volumes:[],centers:[],total:0,poc:null};
-        const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('extreme-'));
         busy=true;
-        Plotly.update(gd,{x:[[]],y:[[]]},{annotations},[profileIndex]).finally(()=>{busy=false;});
+        Plotly.update(gd,{x:[[]],y:[[]]},{},[profileIndex]).finally(()=>{busy=false;});
         return;
     }
     let min = visible.reduce((v,r)=>Math.min(v,r[0]),Infinity), max = visible.reduce((v,r)=>Math.max(v,r[1]),-Infinity);
@@ -398,7 +397,7 @@ function updateProfile(range, fitPrice=true) {
     const update={'xaxis2.autorange':true};
     if(fitPrice) {update['yaxis.range']=[priceMin-pad,priceMax+pad];update['yaxis6.range']=[0,100];}
     const lastClose=ohlc[ohlc.length-1][3];
-    const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('extreme-'));
+    const annotations=(gd.layout.annotations || []).map(a=>({...a}));
     update.annotations=annotations;
     const lastLabel=gd.layout.annotations.findIndex(a=>a.name==='last-close');
     const priceRange=fitPrice?[priceMin-pad,priceMax+pad]:gd.layout.yaxis.range;

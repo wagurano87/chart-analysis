@@ -22,3 +22,12 @@ class OnlinePriceTests(unittest.TestCase):
         frame=demo_prices().tail(3)
         frame['High']=1
         with self.assertRaisesRegex(ValueError,'유효한'): prepare_online_prices(frame)
+
+    def test_kosdaq_fallback_after_kospi_error(self):
+        from unittest.mock import patch
+        from market_data import fetch_prices
+        with patch('yfinance.download', side_effect=[OSError('first candidate failed'), demo_prices()]) as download:
+            frame, provider, _ = fetch_prices('290650', '한국', 'NASDAQ')
+        self.assertFalse(frame.empty)
+        self.assertEqual(provider, '290650.KQ')
+        self.assertEqual([call.args[0] for call in download.call_args_list], ['290650.KS', '290650.KQ'])

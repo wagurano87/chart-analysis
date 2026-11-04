@@ -1,4 +1,4 @@
-"""Small offline alias list plus Yahoo search for other listed instruments."""
+"""Searchable Korean/US directories, common aliases and remote fallback."""
 import re
 from korean_listings import get_directory
 from us_listings import get_directory as get_us_directory
@@ -56,18 +56,17 @@ def search_symbols(query):
     key=compact(query)
     local=[(name,code,market,'주식') for name,code,market,alias in COMMON
            if any(key in compact(v) for v in (name,code,alias))]
-    if local:
-        return local, '기본 종목 목록 · 이름과 코드를 확인하고 선택하세요.'
     directory, _ = get_directory()
     domestic = [(row['name'], row['code'], '한국', row['exchange']) for row in directory
                 if key in compact(row['name']) or key in row['code']]
-    if domestic:
-        return domestic, 'KIND 국내 상장사 목록'
     us_directory, _ = get_us_directory()
     us_matches = [(row['name'], row['code'], '미국', row['kind']) for row in us_directory
                   if key in compact(row['name']) or key in compact(row['code'])]
-    if us_matches:
-        return us_matches, 'Nasdaq Trader 미국 상장 종목 목록'
+    matches = {}
+    for match in local + domestic + us_matches:
+        matches.setdefault((match[2], match[1]), match)
+    if matches:
+        return list(matches.values()), '종목 목록 · 이름과 코드를 확인하고 선택하세요.'
     import yfinance as yf
     try:
         results=normalize_quotes(yf.Search(query,max_results=20,news_count=0,timeout=10).quotes)
