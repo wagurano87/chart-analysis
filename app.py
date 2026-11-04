@@ -5,7 +5,7 @@ import streamlit as st
 
 from analysis import MA_WINDOWS, assess, completed_daily_bars, indicators, resample_bars
 from crypto_data import CRYPTO_MARKETS, crypto_symbol, quote_currency, fetch_crypto, completed_four_hour_bars
-from symbol_search import render_symbol_search
+from symbol_search import render_symbol_picker
 from market_data import demo_prices, fetch_prices, read_csv, symbols, stock_four_hour
 
 st.set_page_config(page_title="차트 분석 · Dual MACD", layout="wide")
@@ -35,6 +35,8 @@ def open_favorite(symbol):
     st.session_state['analysis_market'] = '바이낸스'
     st.session_state['analysis_ticker'] = symbol
     st.session_state['favorite_requested'] = True
+    st.session_state['symbol_sync'] = True
+    st.session_state['symbol_pending'] = False
 
 
 st.caption('바이낸스 현물 빠른 조회 · USDT 기준')
@@ -47,14 +49,13 @@ favorites[1].button('◆ 이더리움', key='favorite_eth', on_click=open_favori
 
 with st.sidebar:
     st.header("분석 대상")
-    with st.form("request"):
-        mode = st.selectbox("데이터", ["온라인 시세", "CSV 업로드", "가상 데이터 체험"], key="analysis_mode")
-        market = st.selectbox("시장", ["한국", "미국", "바이낸스", "업비트"], key="analysis_market")
-        ticker = st.text_input("종목 코드 / 티커 / 코인 거래쌍", key="analysis_ticker")
-        uploaded = st.file_uploader("CSV: Date, Open, High, Low, Close, Volume", type="csv")
-        submitted = st.form_submit_button("분석하기", type="primary")
+    mode = st.selectbox("데이터", ["온라인 시세", "CSV 업로드", "가상 데이터 체험"], key="analysis_mode")
+    render_symbol_picker()
+    market = st.selectbox("시장", ["한국", "미국", "바이낸스", "업비트"], key="analysis_market")
+    ticker = st.session_state['analysis_ticker']
+    uploaded = st.file_uploader("CSV: Date, Open, High, Low, Close, Volume", type="csv")
+    submitted = st.button("분석하기", type="primary", disabled=st.session_state.get('symbol_pending', False))
     st.caption("바이낸스: BTCUSDT, ETHUSDT · 업비트: KRW-BTC, KRW-ETH (현물)")
-    render_symbol_search()
     st.caption("한국: 005930(삼성전자), 000660(SK하이닉스)\n\n미국: AAPL·NVDA(NASDAQ), IBM(NYSE)")
     bins = st.select_slider("VRVP 가격 구간 수", options=[16, 24, 32, 48, 64], value=32)
     with st.expander('ADX·ADXR·DI 설정'):

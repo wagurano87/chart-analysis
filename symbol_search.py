@@ -10,6 +10,7 @@ COMMON = [
     ('NAVER', '035420', '한국', '네이버'),
     ('카카오', '035720', '한국', 'Kakao'),
     ('LG에너지솔루션', '373220', '한국', 'LG Energy Solution'),
+    ('인텔', 'INTC', '미국', 'Intel'),
     ('애플', 'AAPL', '미국', 'Apple'),
     ('엔비디아', 'NVDA', '미국', 'NVIDIA'),
     ('마이크로소프트', 'MSFT', '미국', 'Microsoft'),
@@ -60,28 +61,63 @@ def search_symbols(query):
     return results, 'Yahoo Finance 검색 · 한국·미국 주식/ETF만 표시합니다. 결과가 없으면 영문명 또는 코드를 입력하세요.'
 
 
-def render_symbol_search():
+def render_symbol_picker():
+    """One searchable input for aliases, codes and remote search results."""
     import streamlit as st
-    with st.expander('🔎 종목명으로 코드 찾기'):
-        with st.form('symbol_lookup'):
-            query=st.text_input('회사명 / 종목명 / 코드',placeholder='삼성전자, 엔비디아, Apple')
-            search=st.form_submit_button('종목 검색')
-        if search:
-            results,message=search_symbols(query)
-            st.session_state['symbol_matches']=results
-            st.session_state['symbol_search_message']=message
-            st.session_state.pop('symbol_choice',None)
-        matches=st.session_state.get('symbol_matches',[])
-        if 'symbol_search_message' in st.session_state:
-            st.caption(st.session_state['symbol_search_message'])
-        if matches:
-            choice=st.selectbox('검색 결과',range(len(matches)),key='symbol_choice',
-                format_func=lambda i:f'{matches[i][0]} · {matches[i][1]} · {matches[i][2]} · {matches[i][3]}')
-            def apply():
-                match=st.session_state['symbol_matches'][st.session_state['symbol_choice']]
-                st.session_state['analysis_market']=match[2]
-                st.session_state['analysis_ticker']=match[1]
-            st.button('선택 종목 입력',on_click=apply)
-            st.caption('선택 종목 입력 후 위의 분석하기를 누르세요.')
-        elif search:
-            st.info('검색 결과가 없습니다.')
+    entries = {f'{name} · {alias} · {code} · {market}': (code, market)
+               for name, code, market, alias in COMMON}
+    entries.update({f'{code} · {market}': (code, market)
+                    for code, market in [('BTCUSDT', '바이낸스'), ('ETHUSDT', '바이낸스'),
+                                         ('KRW-BTC', '업비트'), ('KRW-ETH', '업비트')]})
+    entries = {**st.session_state.get('symbol_extra_entries', {}), **entries}
+    current = (st.session_state.get('analysis_ticker', '005930'),
+               st.session_state.get('analysis_market', '한국'))
+    default = next((label for label, pair in entries.items() if pair == current), None)
+    if default is None:
+        default = f'{current[0]} · {current[1]}'
+        entries[default] = current
+    if st.session_state.pop('symbol_sync', False) or 'symbol_entry' not in st.session_state:
+        st.session_state['symbol_entry'] = default
+
+    def select():
+        value = st.session_state['symbol_entry'].strip()
+        st.session_state.pop('symbol_picker_message', None)
+        if value in entries:
+            code, market = entries[value]
+        else:
+            if re.fullmatch(r'(?:[A-Za-z0-9]+USDT|KRW-[A-Za-z0-9]+)', value, re.I):
+                matches, message = [], ''
+            else:
+                matches, message = search_symbols(value)
+            if matches:
+                extras = {f'{name} · {code} · {market}': (code, market)
+                          for name, code, market, _ in matches}
+                st.session_state['symbol_extra_entries'] = extras
+                st.session_state['symbol_picker_message'] = '검색된 후보 목록에서 종목을 선택하세요.'
+                st.session_state['symbol_pending'] = True
+                return
+            code = value.upper()
+            if re.fullmatch(r'\d{6}', code):
+                market = '한국'
+            elif re.fullmatch(r'KRW-[A-Z0-9]+', code):
+                market = '업비트'
+            elif re.fullmatch(r'[A-Z0-9]+USDT', code):
+                market = '바이낸스'
+            elif re.fullmatch(r'[A-Z][A-Z0-9.-]{0,12}', code):
+                market = '미국'
+            else:
+                st.session_state['symbol_picker_message'] = message
+                st.session_state['symbol_pending'] = True
+                return
+        st.session_state['analysis_ticker'] = code
+        st.session_state['analysis_market'] = market
+        st.session_state['symbol_pending'] = False
+        st.session_state['symbol_sync'] = True
+
+    st.selectbox('종목명 / 코드 / 티커 / 코인 거래쌍', list(entries),
+                 key='symbol_entry', accept_new_options=True, on_change=select,
+                 placeholder='삼성전자, 인텔, AAPL, BTCUSDT',
+                 help='이름을 입력해 후보를 선택하세요. 목록에 없는 종목은 입력 후 Enter로 검색합니다.')
+    if st.session_state.get('symbol_picker_message'):
+        st.caption(st.session_state['symbol_picker_message'])
+    st.caption(f"선택 종목: {st.session_state['analysis_ticker']} · {st.session_state.get('analysis_market', '한국')}")

@@ -16,7 +16,7 @@ class AppTests(unittest.TestCase):
                 self.assertFalse(app.exception)
                 self.assertEqual(app.selectbox(key='analysis_market').value, '바이낸스')
                 self.assertEqual(app.selectbox(key='analysis_mode').value, '온라인 시세')
-                self.assertEqual(app.text_input(key='analysis_ticker').value, symbol)
+                self.assertEqual(app.session_state['analysis_ticker'], symbol)
                 fetch.assert_called_with(symbol, '바이낸스', 'NASDAQ')
                 self.assertEqual(len(app.get('iframe')), 1)
                 with self.assertRaises(KeyError):
@@ -29,7 +29,8 @@ class AppTests(unittest.TestCase):
         with patch('market_data.fetch_prices', return_value=(demo_prices(), '바이낸스 · SOLUSDT', 'SOLUSDT')), patch('crypto_data.fetch_crypto', return_value=(intraday, '바이낸스 · SOLUSDT', 'SOLUSDT')):
             app = AppTest.from_file(APP, default_timeout=30).run()
             app.selectbox(key='analysis_market').select('바이낸스')
-            app.text_input(key='analysis_ticker').set_value('SOLUSDT')
+            app.selectbox(key='symbol_entry').options.append('SOLUSDT')
+            app.selectbox(key='symbol_entry').set_value('SOLUSDT').run()
             next(b for b in app.button if b.label == '분석하기').click().run()
             app.radio(key='chart_timeframe').set_value('4시간봉').run()
             self.assertFalse(app.exception)
@@ -40,7 +41,8 @@ class AppTests(unittest.TestCase):
             self.assertFalse(app.exception)
             self.assertEqual(len(app.get('iframe')), 1)
         with patch('market_data.fetch_prices', return_value=(demo_prices(), '바이낸스 · FAILUSDT', 'FAILUSDT')), patch('crypto_data.fetch_crypto', side_effect=RuntimeError('연결 실패 테스트')):
-            app.text_input(key='analysis_ticker').set_value('FAILUSDT')
+            app.selectbox(key='symbol_entry').options.append('FAILUSDT')
+            app.selectbox(key='symbol_entry').set_value('FAILUSDT').run()
             next(b for b in app.button if b.label == '분석하기').click().run()
             app.radio(key='chart_timeframe').set_value('4시간봉').run()
             self.assertFalse(app.exception)
@@ -74,10 +76,11 @@ class AppTests(unittest.TestCase):
 
     def test_invalid_symbol_shows_error_without_results(self):
         app = AppTest.from_file(APP, default_timeout=30).run()
-        app.text_input[0].set_value("<invalid>")
-        next(b for b in app.button if b.label == "분석하기").click().run()
+        with patch("symbol_search.search_symbols", return_value=([], "검색 결과가 없습니다.")):
+            app.selectbox(key="symbol_entry").options.append("<invalid>")
+            app.selectbox(key="symbol_entry").set_value("<invalid>").run()
         self.assertEqual(len(app.exception), 0)
-        self.assertTrue(any("6자리" in item.value for item in app.error))
+        self.assertTrue(next(b for b in app.button if b.label == "분석하기").disabled)
         self.assertEqual(len(app.metric), 0)
 
     def test_online_result_shows_only_analysis_chart(self):
