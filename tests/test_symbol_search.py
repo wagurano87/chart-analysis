@@ -10,6 +10,8 @@ class SearchTests(unittest.TestCase):
             result,_=search_symbols('삼성전자')
             self.assertEqual(result[0][1],'005930')
             self.assertEqual(search_symbols('엔비디아')[0][0][1],'NVDA')
+            for query in ['대한광통신', '대한 광통신', '010170', 'Taihan Fiberoptics']:
+                self.assertEqual(search_symbols(query)[0][0][:3], ('대한광통신', '010170', '한국'))
     def test_exchange_filter(self):
         result=normalize_quotes([
             {'symbol':'000660.KS','quoteType':'EQUITY'},

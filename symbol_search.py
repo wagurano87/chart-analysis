@@ -2,6 +2,7 @@
 import re
 
 COMMON = [
+    ('대한광통신', '010170', '한국', 'Taihan Fiberoptics'),
     ('삼성전자', '005930', '한국', 'Samsung Electronics'),
     ('삼성전자우', '005935', '한국', 'Samsung Electronics preferred'),
     ('SK하이닉스', '000660', '한국', 'SK Hynix'),
