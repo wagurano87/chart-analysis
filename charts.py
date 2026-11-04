@@ -331,12 +331,6 @@ document.getElementById('reset-view').addEventListener('click',()=>{
     fitNextRange=true;
     Plotly.relayout(gd,{'xaxis.range':[Math.max(-.5,records.length-60-.5),records.length-.5],dragmode:'pan'});
 });
-document.getElementById('toggle-extremes').addEventListener('click',event=>{
-    const button=event.currentTarget;
-    const visible=button.getAttribute('aria-pressed')!=='true';
-    button.setAttribute('aria-pressed',String(visible));
-    document.getElementById('drawdown-status').hidden=!visible;
-});
 document.getElementById('toggle-ma').addEventListener('click',event=>{
     averagesVisible=!averagesVisible;
     event.currentTarget.setAttribute('aria-pressed',String(averagesVisible));
@@ -362,17 +356,12 @@ function updateProfile(range, fitPrice=true) {
     });
     if (!visible.length) {
         window.__volumeProfile = {first:lo,last:hi,volumes:[],centers:[],total:0,poc:null};
-        document.getElementById('profile-status').textContent = '선택 범위에 봉이 없습니다.';
-        document.getElementById('extreme-high').textContent='최고: 표시 구간에 데이터 없음';
-        document.getElementById('extreme-low').textContent='최저: 표시 구간에 데이터 없음';
-        document.getElementById('extreme-reference').textContent='';
         const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('extreme-'));
         busy=true;
         Plotly.update(gd,{x:[[]],y:[[]]},{annotations},[profileIndex]).finally(()=>{busy=false;});
         return;
     }
     let min = visible.reduce((v,r)=>Math.min(v,r[0]),Infinity), max = visible.reduce((v,r)=>Math.max(v,r[1]),-Infinity);
-    const visiblePeak=max, visibleLow=min;
     if (max === min) { min -= Math.max(.01, Math.abs(min)*.001); max += Math.max(.01,Math.abs(max)*.001); }
     const step = (max-min)/binCount, volumes = new Array(binCount).fill(0);
     // With OHLCV only, approximate each candle's volume uniformly over its low/high.
@@ -386,7 +375,6 @@ function updateProfile(range, fitPrice=true) {
     const centers=volumes.map((_,b)=>min+(b+.5)*step);
     const poc=volumes.some(v=>v>0) ? volumes.indexOf(Math.max(...volumes)) : -1;
     window.__volumeProfile = {first:lo,last:hi,volumes,centers,total:visible.reduce((sum,r)=>sum+r[2],0),poc:centers[poc]};
-    document.getElementById('profile-status').textContent = `표시 범위: ${dates[lo]} ~ ${dates[hi]} · ${visible.length}개 봉 · 추정 POC: ${poc<0?'거래량 없음':centers[poc].toFixed(2)}`;
     const profileUpdate={x:[volumes], y:[centers], width:[step*.94], 'marker.color':[volumes.map((_,i)=>i===poc?'#fbbf24':'#475569')]};
     let priceMin=min, priceMax=max;
     if(averagesVisible) {
@@ -394,21 +382,12 @@ function updateProfile(range, fitPrice=true) {
             if(value!==null && Number.isFinite(value)) {priceMin=Math.min(priceMin,value);priceMax=Math.max(priceMax,value);}
         }
     }
-    const peakIndex=lo+visible.findIndex(row=>row[1]===visiblePeak);
-    const drawdown=(ohlc[ohlc.length-1][3]/visiblePeak-1)*100;
-    document.getElementById('extreme-reference').textContent=`비교 종가 ${number(ohlc[ohlc.length-1][3])} · 마지막 완료 봉 ${dates[dates.length-1]} · 현재 표시 구간 기준`;
     const pad=(priceMax-priceMin)*.05;
     const ticks=[]; for(let i=lo;i<=hi;i+=Math.max(1,Math.ceil((hi-lo+1)/Math.max(3,Math.floor(gd.clientWidth/130))))) ticks.push(i);
     const update={'xaxis2.autorange':true};
     if(fitPrice) {update['yaxis.range']=[priceMin-pad,priceMax+pad];update['yaxis6.range']=[0,100];}
     const lastClose=ohlc[ohlc.length-1][3];
-    const troughIndex=lo+visible.findIndex(row=>row[0]===visibleLow);
     const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('extreme-'));
-    const recovery=(lastClose/visibleLow-1)*100;
-    const highCard=document.getElementById('extreme-high');
-    const lowCard=document.getElementById('extreme-low');
-    highCard.textContent=`최고 ${number(visiblePeak)} · ${dates[peakIndex]} → 종가까지 ${drawdown>=0?'+':''}${drawdown.toFixed(2)}%`;
-    lowCard.textContent=`최저 ${number(visibleLow)} · ${dates[troughIndex]} → 종가까지 ${recovery>=0?'+':''}${recovery.toFixed(2)}%`;
     update.annotations=annotations;
     const lastLabel=gd.layout.annotations.findIndex(a=>a.name==='last-close');
     const priceRange=fitPrice?[priceMin-pad,priceMax+pad]:gd.layout.yaxis.range;
@@ -625,8 +604,22 @@ function endPinch(event) {
 }
 gd.addEventListener('touchend',endPinch,{capture:true});
 gd.addEventListener('touchcancel',event=>{pinch=null;finishingPinch=false;},{capture:true});
+let fitFrame;
+function fitChartFrame() {
+    cancelAnimationFrame(fitFrame);
+    fitFrame=requestAnimationFrame(()=>{
+        const top=gd.getBoundingClientRect().top;
+        const height=Math.max(100,Math.floor(window.innerHeight-top-2));
+        gd.style.height=height+'px';
+        if(Math.abs(gd.layout.height-height)>1) Plotly.relayout(gd,{height});
+    });
+}
+const headerObserver=new ResizeObserver(fitChartFrame);
+for(const id of ['chart-toolbar','candle-readout','indicator-readout','drawing-status']) headerObserver.observe(document.getElementById(id));
+fitChartFrame();
 let resizeTimer;
 window.addEventListener('resize',()=>{
+    fitChartFrame();
     clearTimeout(resizeTimer);
     resizeTimer=setTimeout(()=>scheduleProfile(gd.layout.xaxis.range),200);
 });
@@ -642,6 +635,8 @@ updateProfile([START, END]);
                                'modeBarButtonsToAdd':['drawline','drawrect','eraseshape'], 'toImageButtonOptions':{'filename':'chart-analysis'}})
     toolbar = '''<style>
     * {box-sizing:border-box;}
+    html,body {width:100%;height:100%;overflow:hidden;}
+    #analysis-chart {width:100%;max-width:100%;}
     #chart-toolbar {display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;padding:6px 10px;background:#171c28;border-bottom:1px solid #2a3140;}
     #range-toolbar,#tools {display:flex;gap:3px;flex-wrap:wrap;}
     #tools {width:100%;border-top:1px solid #2a3140;padding-top:4px;}
@@ -661,12 +656,6 @@ updateProfile([START, END]);
     .axis-wheel-control {position:absolute;z-index:30;pointer-events:auto;cursor:ns-resize;background:transparent;touch-action:none;user-select:none;}
     .axis-wheel-control:hover,.axis-wheel-control.axis-dragging {background:rgba(96,165,250,.12);border-right:2px solid #60a5fa;}
     #analysis-chart .nsewdrag {touch-action:pan-y;}
-    #drawdown-status {padding:6px 14px;font-size:12px;}
-    .extreme-cards {display:flex;flex-wrap:wrap;gap:6px;}
-    .extreme-cards>div {flex:1 1 240px;padding:7px 9px;background:#1b2230;border-radius:4px;line-height:1.5;font-variant-numeric:tabular-nums;}
-    #extreme-high {color:#fda4af;}
-    #extreme-low {color:#6ee7b7;}
-    #extreme-reference {font-size:11px;color:#94a3b8;padding-top:4px;}
     .crosshair {position:absolute;pointer-events:none;z-index:20;display:none;}
     #cross-v {border-left:1px dashed #959eaf;}
     #cross-h {border-top:1px dashed #959eaf;}
@@ -689,9 +678,8 @@ updateProfile([START, END]);
     <select id="drawing-picker" aria-label="삭제할 도형 선택"><option value="">도형 선택</option></select>
     <button type="button" id="clear-drawings" disabled title="직접 그린 도형만 모두 삭제">도형 전체 삭제</button>
     <button type="button" id="toggle-ma" aria-pressed="true" title="이동평균선 표시 전환">MA</button>
-    <button type="button" id="toggle-extremes" aria-pressed="true" aria-controls="drawdown-status" title="표시 구간 최고·최저 정보 표시 전환">고저점 표시</button>
     <button type="button" id="fit-price" title="표시 구간에 세로 눈금 맞추기">세로 맞춤</button>
     <button type="button" id="reset-view" title="최근 60봉과 자동 눈금으로 돌아가기">기본 보기</button>
     <button type="button" id="save-image" title="차트를 PNG 이미지로 저장">PNG 저장</button>
-    </nav></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="drawing-status" role="status"></div><section id="drawdown-status" aria-label="표시 구간 최고·최저"><div class="extreme-cards"><div id="extreme-high"></div><div id="extreme-low"></div></div><div id="extreme-reference"></div></section><div id="profile-status" style="padding:3px 14px 6px;font-size:11px;color:#8e9bb0"></div>'''
+    </nav></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="drawing-status" role="status"></div>'''
     return html.replace('<body>', '<body style="margin:0;background:#131722;color:#cbd5e1;font-family:sans-serif">'+toolbar)
