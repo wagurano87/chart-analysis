@@ -331,6 +331,12 @@ document.getElementById('reset-view').addEventListener('click',()=>{
     fitNextRange=true;
     Plotly.relayout(gd,{'xaxis.range':[Math.max(-.5,records.length-60-.5),records.length-.5],dragmode:'pan'});
 });
+document.getElementById('toggle-extremes').addEventListener('click',event=>{
+    const button=event.currentTarget;
+    const visible=button.getAttribute('aria-pressed')!=='true';
+    button.setAttribute('aria-pressed',String(visible));
+    document.getElementById('drawdown-status').hidden=!visible;
+});
 document.getElementById('toggle-ma').addEventListener('click',event=>{
     averagesVisible=!averagesVisible;
     event.currentTarget.setAttribute('aria-pressed',String(averagesVisible));
@@ -357,7 +363,9 @@ function updateProfile(range, fitPrice=true) {
     if (!visible.length) {
         window.__volumeProfile = {first:lo,last:hi,volumes:[],centers:[],total:0,poc:null};
         document.getElementById('profile-status').textContent = '선택 범위에 봉이 없습니다.';
-        document.getElementById('drawdown-status').textContent='선택 범위에 최고·최저가 정보가 없습니다.';
+        document.getElementById('extreme-high').textContent='최고: 표시 구간에 데이터 없음';
+        document.getElementById('extreme-low').textContent='최저: 표시 구간에 데이터 없음';
+        document.getElementById('extreme-reference').textContent='';
         const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('extreme-'));
         busy=true;
         Plotly.update(gd,{x:[[]],y:[[]]},{annotations},[profileIndex]).finally(()=>{busy=false;});
@@ -388,7 +396,7 @@ function updateProfile(range, fitPrice=true) {
     }
     const peakIndex=lo+visible.findIndex(row=>row[1]===visiblePeak);
     const drawdown=(ohlc[ohlc.length-1][3]/visiblePeak-1)*100;
-    document.getElementById('drawdown-status').textContent=`표시 구간 최고가 ${number(visiblePeak)} (${dates[peakIndex]}) → 마지막 완료 봉 종가 ${number(ohlc[ohlc.length-1][3])}: ${drawdown>=0?'+':''}${drawdown.toFixed(2)}% · 마지막 완료 봉 ${dates[dates.length-1]}`;
+    document.getElementById('extreme-reference').textContent=`비교 종가 ${number(ohlc[ohlc.length-1][3])} · 마지막 완료 봉 ${dates[dates.length-1]} · 현재 표시 구간 기준`;
     const pad=(priceMax-priceMin)*.05;
     const ticks=[]; for(let i=lo;i<=hi;i+=Math.max(1,Math.ceil((hi-lo+1)/Math.max(3,Math.floor(gd.clientWidth/130))))) ticks.push(i);
     const update={'xaxis2.autorange':true};
@@ -396,13 +404,11 @@ function updateProfile(range, fitPrice=true) {
     const lastClose=ohlc[ohlc.length-1][3];
     const troughIndex=lo+visible.findIndex(row=>row[0]===visibleLow);
     const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('extreme-'));
-    for(const [name,index,price,offset] of [['high',peakIndex,visiblePeak,45],['low',troughIndex,visibleLow,-45]]) {
-        const percent=(lastClose/price-1)*100;
-        annotations.push({name:'extreme-'+name,x:index,y:price,xref:'x',yref:'y',
-            text:`${name==='high'?'최고':'최저'} ${number(price)} → 현재 ${percent>=0?'+':''}${percent.toFixed(2)}%`,
-            showarrow:true,arrowhead:2,ax:index>(lo+hi)/2?-70:70,ay:offset,
-            bgcolor:'#1e293b',borderpad:4,font:{size:11,color:name==='high'?'#fda4af':'#6ee7b7'}});
-    }
+    const recovery=(lastClose/visibleLow-1)*100;
+    const highCard=document.getElementById('extreme-high');
+    const lowCard=document.getElementById('extreme-low');
+    highCard.textContent=`최고 ${number(visiblePeak)} · ${dates[peakIndex]} → 종가까지 ${drawdown>=0?'+':''}${drawdown.toFixed(2)}%`;
+    lowCard.textContent=`최저 ${number(visibleLow)} · ${dates[troughIndex]} → 종가까지 ${recovery>=0?'+':''}${recovery.toFixed(2)}%`;
     update.annotations=annotations;
     const lastLabel=gd.layout.annotations.findIndex(a=>a.name==='last-close');
     const priceRange=fitPrice?[priceMin-pad,priceMax+pad]:gd.layout.yaxis.range;
@@ -655,6 +661,12 @@ updateProfile([START, END]);
     .axis-wheel-control {position:absolute;z-index:30;pointer-events:auto;cursor:ns-resize;background:transparent;touch-action:none;user-select:none;}
     .axis-wheel-control:hover,.axis-wheel-control.axis-dragging {background:rgba(96,165,250,.12);border-right:2px solid #60a5fa;}
     #analysis-chart .nsewdrag {touch-action:pan-y;}
+    #drawdown-status {padding:6px 14px;font-size:12px;}
+    .extreme-cards {display:flex;flex-wrap:wrap;gap:6px;}
+    .extreme-cards>div {flex:1 1 240px;padding:7px 9px;background:#1b2230;border-radius:4px;line-height:1.5;font-variant-numeric:tabular-nums;}
+    #extreme-high {color:#fda4af;}
+    #extreme-low {color:#6ee7b7;}
+    #extreme-reference {font-size:11px;color:#94a3b8;padding-top:4px;}
     .crosshair {position:absolute;pointer-events:none;z-index:20;display:none;}
     #cross-v {border-left:1px dashed #959eaf;}
     #cross-h {border-top:1px dashed #959eaf;}
@@ -677,8 +689,9 @@ updateProfile([START, END]);
     <select id="drawing-picker" aria-label="삭제할 도형 선택"><option value="">도형 선택</option></select>
     <button type="button" id="clear-drawings" disabled title="직접 그린 도형만 모두 삭제">도형 전체 삭제</button>
     <button type="button" id="toggle-ma" aria-pressed="true" title="이동평균선 표시 전환">MA</button>
+    <button type="button" id="toggle-extremes" aria-pressed="true" aria-controls="drawdown-status" title="표시 구간 최고·최저 정보 표시 전환">고저점 표시</button>
     <button type="button" id="fit-price" title="표시 구간에 세로 눈금 맞추기">세로 맞춤</button>
     <button type="button" id="reset-view" title="최근 60봉과 자동 눈금으로 돌아가기">기본 보기</button>
     <button type="button" id="save-image" title="차트를 PNG 이미지로 저장">PNG 저장</button>
-    </nav></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="drawing-status" role="status"></div><div id="drawdown-status" style="padding:3px 14px;font-size:12px;color:#93c5fd"></div><div id="profile-status" style="padding:3px 14px 6px;font-size:11px;color:#8e9bb0"></div>'''
+    </nav></div><div id="candle-readout" aria-live="off"></div><div id="indicator-readout" aria-live="off"></div><div id="drawing-status" role="status"></div><section id="drawdown-status" aria-label="표시 구간 최고·최저"><div class="extreme-cards"><div id="extreme-high"></div><div id="extreme-low"></div></div><div id="extreme-reference"></div></section><div id="profile-status" style="padding:3px 14px 6px;font-size:11px;color:#8e9bb0"></div>'''
     return html.replace('<body>', '<body style="margin:0;background:#131722;color:#cbd5e1;font-family:sans-serif">'+toolbar)
