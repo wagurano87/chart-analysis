@@ -6,13 +6,13 @@ from plotly.subplots import make_subplots
 from analysis import MA_WINDOWS
 
 
-def chart_html(frame, timeframe, bins=32):
+def chart_html(frame, timeframe, bins=32, adx_threshold=20):
     x = list(range(len(frame)))
     dates = frame.index.strftime('%Y-%m-%d %H:%M' if timeframe=='4시간봉' else '%Y-%m-%d').tolist()
-    fig = make_subplots(rows=6, cols=2, shared_xaxes=True, shared_yaxes=True,
-                        column_widths=[.88, .12], row_heights=[.46, .07, .14, .14, .10, .09],
-                        horizontal_spacing=.075, vertical_spacing=.032,
-                        specs=[[{}, {}], [{}, None], [{}, None], [{}, None], [{}, None], [{}, None]])
+    fig = make_subplots(rows=7, cols=2, shared_xaxes=True, shared_yaxes=True,
+                        column_widths=[.88, .12], row_heights=[.40, .06, .12, .12, .08, .08, .14],
+                        horizontal_spacing=.075, vertical_spacing=.027,
+                        specs=[[{}, {}], [{}, None], [{}, None], [{}, None], [{}, None], [{}, None], [{}, None]])
     colors = ['#26a69a' if c >= o else '#ef5350' for c, o in zip(frame.Close, frame.Open)]
     fig.add_trace(go.Candlestick(x=x, open=frame.Open, high=frame.High, low=frame.Low,
                                 close=frame.Close, text=dates, name=timeframe,
@@ -57,22 +57,28 @@ def chart_html(frame, timeframe, bins=32):
                         for i in signal_positions],
             hovertemplate='%{customdata[0]}<br><b>매도 주의 시그널</b><br>0선 상향 돌파 후 MACD 양수 유지·오실레이터 음전환<br>MACD %{customdata[1]:.4f}<br>오실레이터 %{customdata[2]:.4f}<extra></extra>'
         ), row=row, col=1)
+    for name,color in [('PlusDI','#34d399'),('MinusDI','#f87171'),('ADX','#fbbf24'),('ADXR','#c084fc')]:
+        fig.add_trace(go.Scatter(x=x,y=frame[name],name=name,line=dict(color=color,width=2),customdata=dates,
+            hovertemplate='%{customdata}<br>'+name+': %{y:.2f}<extra></extra>'),row=7,col=1)
+    fig.add_hline(y=adx_threshold,line_dash='dot',line_color='#94a3b8',row=7,col=1)
     for value in (30, 70):
         fig.add_hline(y=value, line_dash='dot', line_color='#94a3b8', row=5, col=1)
     start = max(0, len(frame) - 60)
     ticks = list(range(0, len(frame), max(1, len(frame) // 15)))
-    for row in range(1, 7):
+    for row in range(1, 8):
         fig.update_xaxes(range=[start-.5, len(frame)-.5], tickvals=ticks, ticktext=[dates[i] for i in ticks],
                          showspikes=False,
                          showgrid=True, gridcolor='#242b38', row=row, col=1)
-    for row, title in [(1, '가격'), (2, '거래량'), (3, 'MACD 6·19·9'), (4, 'MACD 19·39·9'), (5, 'RSI 14'), (6, 'OBV')]:
+    for row, title in [(1, '가격'), (2, '거래량'), (3, 'MACD 6·19·9'), (4, 'MACD 19·39·9'), (5, 'RSI 14'), (6, 'OBV'), (7, 'ADX / ADXR / DI')]:
         fig.update_yaxes(title_text=None, side='right', tickfont=dict(size=12, color='#cbd5e1'),
                          nticks=5, gridcolor='#242b38', fixedrange=False,
                          showspikes=False, zerolinecolor='#475569', row=row, col=1)
     for row, title in [(1, f'{timeframe} 이동평균'), (2, '거래량'),
-                       (3, 'MACD 6 · 19 · 9'), (4, 'MACD 19 · 39 · 9'), (5, 'RSI 14'), (6, 'OBV')]:
+                       (3, 'MACD 6 · 19 · 9'), (4, 'MACD 19 · 39 · 9'), (5, 'RSI 14'), (6, 'OBV'), (7, 'ADX / ADXR / DI')]:
         axis = fig.layout['yaxis' if row == 1 else f'yaxis{row+1}']
         text = '<b>'+title+'</b>'
+        if row == 7:
+            text='<b>ADX · ADXR</b> <span style="color:#34d399">+DI</span> <span style="color:#f87171">−DI</span> <span style="color:#fbbf24">ADX</span> <span style="color:#c084fc">ADXR</span>'
         if row in (3,4):
             text += '  <span style="color:#38bdf8">MACD</span>  <span style="color:#fb923c">Signal</span>'
         if row == 1:
@@ -101,7 +107,7 @@ def chart_html(frame, timeframe, bins=32):
     fig.update_xaxes(showticklabels=True, side='bottom', ticks='outside',
                      tickfont=dict(size=11), tickangle=0, row=1, col=1)
     fig.update_xaxes(title_text=None, showticklabels=False, row=1, col=2)
-    fig.update_layout(height=1100, template='plotly_dark', paper_bgcolor='#131722', plot_bgcolor='#131722',
+    fig.update_layout(height=1320, template='plotly_dark', paper_bgcolor='#131722', plot_bgcolor='#131722',
                       margin=dict(l=12,r=12,t=32,b=30), dragmode='pan', hovermode='closest',
                       xaxis_rangeslider_visible=False, showlegend=False, font=dict(family='Arial, sans-serif',size=12,color='#cbd5e1'),
                       hoverlabel=dict(bgcolor='#222b3b',font_size=13),
@@ -282,7 +288,7 @@ gd.addEventListener('pointermove',event=>{
     cursorFrame=requestAnimationFrame(()=>{
         const bounds=gd.getBoundingClientRect(), px=event.clientX-bounds.left, py=event.clientY-bounds.top;
         const layout=gd._fullLayout, axis=layout.xaxis;
-        const pane=['yaxis','yaxis3','yaxis4','yaxis5','yaxis6','yaxis7']
+        const pane=['yaxis','yaxis3','yaxis4','yaxis5','yaxis6','yaxis7','yaxis8']
             .map(name=>layout[name]).find(a=>py>=a._offset && py<=a._offset+a._length);
         if (!pane || px<axis._offset || px>axis._offset+axis._length) { hideCrosshair(); return; }
         const index=Math.round(axis.p2l(px-axis._offset));
@@ -397,15 +403,16 @@ function updateProfile(range, fitPrice=true) {
     const lastLabel=gd.layout.annotations.findIndex(a=>a.name==='last-close');
     const priceRange=fitPrice?[priceMin-pad,priceMax+pad]:gd.layout.yaxis.range;
     annotations[lastLabel].visible=lastClose>=priceRange[0] && lastClose<=priceRange[1];
-    for (const [axis, columns] of [['yaxis3',[0,9]],['yaxis4',[1,2,3]],['yaxis5',[4,5,6]],['yaxis7',[7]]]) {
+    for (const [axis, columns] of [['yaxis3',[0,9]],['yaxis4',[1,2,3]],['yaxis5',[4,5,6]],['yaxis7',[7]],['yaxis8',[10,11,12,13]]]) {
         const values = series.slice(lo,hi+1).flatMap(row=>columns.map(c=>row[c])).filter(v=>v!==null && Number.isFinite(v));
+        if (axis==='yaxis8') values.push(ADX_THRESHOLD);
         if (!values.length) continue;
         let bottom=values.reduce((a,b)=>Math.min(a,b),Infinity), top=values.reduce((a,b)=>Math.max(a,b),-Infinity);
         if (axis!=='yaxis7') { bottom=Math.min(0,bottom); top=Math.max(0,top); }
         const padding=Math.max((top-bottom)*.08,Math.abs(top)*.001,.01);
         if(fitPrice) update[axis+'.range']=[bottom-padding,top+padding];
     }
-    for (const axis of ['xaxis','xaxis3','xaxis4','xaxis5','xaxis6','xaxis7']) {
+    for (const axis of ['xaxis','xaxis3','xaxis4','xaxis5','xaxis6','xaxis7','xaxis8']) {
         // Set the matched root axis too; otherwise Plotly can restore its old range
         // when another pane is relaid out (e.g. after switching from all to 60 bars).
         if(gd.layout[axis].range.some((v,i)=>v!==range[i])) update[axis+'.range']=range;
@@ -434,7 +441,7 @@ gd.on('plotly_relayout', event => {
 // Coalesce high-frequency trackpad/wheel events; never overlap Plotly redraws.
 let wheelTarget=null, wheelFrame=null, wheelDrawing=false;
 let verticalTargets={};
-const timeAxes=['xaxis','xaxis3','xaxis4','xaxis5','xaxis6','xaxis7'];
+const timeAxes=['xaxis','xaxis3','xaxis4','xaxis5','xaxis6','xaxis7','xaxis8'];
 function boundedRange(left,width) {
     width=Math.max(Math.min(10,records.length),Math.min(records.length+10,width));
     left=Math.max(-5.5,Math.min(records.length+4.5-width,left));
@@ -468,7 +475,7 @@ document.addEventListener('pointerdown',()=>{
     wheelFrame=null;
 },true);
 // Explicit hit targets cover the actual tick labels, including label overflow.
-const verticalAxes=['yaxis','yaxis3','yaxis4','yaxis5','yaxis6','yaxis7'];
+const verticalAxes=['yaxis','yaxis3','yaxis4','yaxis5','yaxis6','yaxis7','yaxis8'];
 function positionAxisControls() {
     const layout=gd._fullLayout;
     if(!layout) return;
@@ -615,10 +622,10 @@ window.addEventListener('resize',()=>{
 });
 updateProfile([START, END]);
 '''
-    values = frame[['Volume','MACD6','Signal6','Histogram6','MACD','Signal','Histogram','OBV','RSI','VolumeAvg20']].to_json(orient='values')
+    values = frame[['Volume','MACD6','Signal6','Histogram6','MACD','Signal','Histogram','OBV','RSI','VolumeAvg20','PlusDI','MinusDI','ADX','ADXR']].to_json(orient='values')
     script = (script.replace('RECORDS', json.dumps(records)).replace('OHLC', frame[['Open','High','Low','Close']].to_json(orient='values')).replace('SERIES',values).replace('DATES',json.dumps(dates))
               .replace('AVERAGES', frame[[f'MA{window}' for window in MA_WINDOWS]].to_json(orient='values'))
-              .replace('BINS', str(int(bins))).replace('PROFILE',str(profile_index))
+              .replace('ADX_THRESHOLD', str(float(adx_threshold))).replace('BINS', str(int(bins))).replace('PROFILE',str(profile_index))
               .replace('START',str(start-.5)).replace('END',str(len(frame)-.5)))
     html = fig.to_html(full_html=True, include_plotlyjs=True, div_id='analysis-chart', post_script=script,
                        config={'scrollZoom':False,'displaylogo':False,'responsive':True,'displayModeBar':False,

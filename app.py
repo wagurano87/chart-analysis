@@ -57,6 +57,11 @@ with st.sidebar:
     render_symbol_search()
     st.caption("한국: 005930(삼성전자), 000660(SK하이닉스)\n\n미국: AAPL·NVDA(NASDAQ), IBM(NYSE)")
     bins = st.select_slider("VRVP 가격 구간 수", options=[16, 24, 32, 48, 64], value=32)
+    with st.expander('ADX·ADXR·DI 설정'):
+        di_length = int(st.number_input('Length (DI)', min_value=2, max_value=100, value=14))
+        adx_threshold = int(st.number_input('Threshold', min_value=0, max_value=100, value=20))
+        adx_length = int(st.number_input('Length ADX', min_value=2, max_value=100, value=14))
+        adxr_length = int(st.number_input('Length ADXR', min_value=1, max_value=100, value=14))
     st.caption("CSV는 일봉을 입력하세요. 주봉은 일봉에서 합산합니다.")
 
 favorite_requested = st.session_state.pop("favorite_requested", False)
@@ -105,9 +110,9 @@ try:
             intraday, provider, tv_symbol = load_four_hour(ticker, market, provider)
         completed = completed_four_hour_bars(intraday) if market in CRYPTO_MARKETS else intraday
         removed = len(intraday)-len(completed)
-        frame = indicators(completed)
+        frame = indicators(completed, di_length, adx_length, adxr_length)
     else:
-        frame = indicators(resample_bars(daily, market, timeframe))
+        frame = indicators(resample_bars(daily, market, timeframe), di_length, adx_length, adxr_length)
 except (ValueError, RuntimeError) as error:
     st.error(str(error))
     st.stop()
@@ -135,7 +140,8 @@ with summary:
 
 from charts import chart_html
 
-st.iframe(chart_html(frame, timeframe, bins), height=1290)
+st.iframe(chart_html(frame, timeframe, bins, adx_threshold), height=1510)
+st.caption(f'ADX·ADXR·DI 설정: DI {di_length} / ADX {adx_length} / ADXR {adxr_length} / 기준선 {adx_threshold}. +DI·−DI는 방향, ADX·ADXR은 추세 강도 참고 지표이며 기존 매도 경고와 독립적입니다.')
 st.caption("▼ 매도 주의 시그널 · 우측 VRVP는 표시 구간의 OHLCV로 추정한 거래량 분포이며 노란 막대는 추정 POC입니다.")
 sell_events = frame.loc[frame.MACD19SellSignal]
 with st.expander("차트 조작·데이터 안내"):

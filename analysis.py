@@ -47,7 +47,7 @@ def completed_daily_bars(frame, market, now=None):
     return frame.loc[allowed].copy()
 
 
-def indicators(frame):
+def indicators(frame, di_length=14, adx_length=14, adxr_length=14):
     if len(frame) < 120:
         raise ValueError("안정적인 지표 계산을 위해 선택한 주기의 완료된 봉이 최소 120개 필요합니다. 주봉은 약 3년 이상의 일봉을 입력하세요.")
     result = frame.copy()
@@ -68,6 +68,7 @@ def indicators(frame):
     # Compare against prior sessions: today's volume must not inflate its own baseline.
     result["VolumeAvg20"] = result.Volume.shift(1).rolling(20).mean()
     result["VolumeRatio"] = result.Volume / result.VolumeAvg20.replace(0, np.nan)
+    result = result.join(directional_indicators(frame, di_length, adx_length, adxr_length))
     return result
 
 
@@ -184,3 +185,42 @@ def assess(frame):
     return {"level": level, "reasons": reasons, "falling": falling,
             "death_cross": death_cross, "zero_cross": zero_cross,
             "distribution": distribution, "below_signal": below_signal}
+
+
+def wilder_average(series, length):
+    if not isinstance(length, int) or length < 1:
+        raise ValueError('지표 기간은 1 이상의 정수여야 합니다.')
+    output=pd.Series(np.nan,index=series.index,dtype=float)
+    seed=[]
+    previous=None
+    for i,value in enumerate(series):
+        if pd.isna(value):
+            seed=[];previous=None
+            continue
+        if previous is None:
+            seed.append(float(value))
+            if len(seed)<length: continue
+            previous=sum(seed)/length
+        else:
+            previous=(previous*(length-1)+value)/length
+        output.iloc[i]=previous
+    return output
+
+
+def directional_indicators(frame, length=14, adx_length=14, adxr_length=14):
+    if not isinstance(adxr_length,int) or adxr_length<1:
+        raise ValueError('ADXR 기간은 1 이상의 정수여야 합니다.')
+    up=frame.High.diff()
+    down=-frame.Low.diff()
+    plus=up.where((up>down)&(up>0),0.0)
+    minus=down.where((down>up)&(down>0),0.0)
+    tr=pd.concat([frame.High-frame.Low,(frame.High-frame.Close.shift()).abs(),(frame.Low-frame.Close.shift()).abs()],axis=1).max(axis=1)
+    atr=wilder_average(tr,length)
+    plus_di=100*wilder_average(plus,length)/atr.where(atr!=0)
+    minus_di=100*wilder_average(minus,length)/atr.where(atr!=0)
+    plus_di=plus_di.mask(atr.eq(0),0)
+    minus_di=minus_di.mask(atr.eq(0),0)
+    total=plus_di+minus_di
+    dx=(100*(plus_di-minus_di).abs()/total.where(total!=0)).mask(total.eq(0),0)
+    adx=wilder_average(dx,adx_length)
+    return pd.DataFrame({'PlusDI':plus_di,'MinusDI':minus_di,'ADX':adx,'ADXR':(adx+adx.shift(adxr_length))/2})
