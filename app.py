@@ -143,7 +143,7 @@ from charts import chart_html
 
 st.iframe(chart_html(frame, timeframe, bins, adx_threshold), height=1510)
 st.caption(f'ADX·ADXR·DI 설정: DI {di_length} / ADX {adx_length} / ADXR {adxr_length} / 기준선 {adx_threshold}. +DI·−DI는 방향, ADX·ADXR은 추세 강도 참고 지표이며 기존 매도 경고와 독립적입니다.')
-st.caption("▼ 매도 주의 시그널 · 우측 VRVP는 표시 구간의 OHLCV로 추정한 거래량 분포이며 노란 막대는 추정 POC입니다.")
+st.caption("▲ DI 매수 시그널 · ▼ 매도 주의 시그널 · 우측 VRVP는 표시 구간의 OHLCV로 추정한 거래량 분포이며 노란 막대는 추정 POC입니다.")
 sell_events = frame.loc[frame.MACD19SellSignal]
 with st.expander("차트 조작·데이터 안내"):
     st.write("차트 바로 위에서 일봉·주봉·4시간봉을 선택하세요. 최근 60봉·180봉·전체 버튼으로 범위를 바꿀 수 있습니다. 이동·확대·추세선·사각형·지우기·PNG 저장 도구를 제공합니다. 그린 선·사각형은 클릭해 선택한 뒤 Delete 키 또는 선택 삭제 버튼으로 삭제합니다. 방금 그린 도형은 자동 선택되며 Esc로 선택을 해제합니다. 휠로 확대하고, 기본 보기로 최근 60봉에 돌아옵니다.")
@@ -152,6 +152,7 @@ with st.expander("차트 조작·데이터 안내"):
     st.write("모바일: 이동 도구에서 차트 안에 두 손가락을 대고 벌리면 확대, 모으면 축소됩니다. 한 손가락은 페이지 스크롤입니다. 그리기 도구 사용 후에는 이동을 선택하세요.")
     st.write("피보나치: 버튼 선택 후 가격 차트에서 시작점부터 끝점까지 드래그하세요. 끝점 0%·시작점 100% 기준으로 되돌림 가격을 표시합니다. 점선 기준선을 선택한 뒤 Delete를 누르면 전체 삭제됩니다. 클릭한 가격을 사용하며 고가·저가 자동 맞춤은 하지 않습니다.")
     st.write("십자선을 움직이면 모든 패널의 같은 날짜와 OHLC·지표 수치를 함께 확인할 수 있습니다. MA 버튼으로 이동평균선을 숨기거나 표시합니다. MACD 막대는 양수/음수와 직전 봉 대비 증가/감소를 색으로 구분합니다.")
+    st.write("초록색 ▲: 직전 봉 +DI ≤ −DI, 현재 완료 봉 +DI > −DI인 상향 돌파. 가격·DI 패널에 함께 표시하며 ADX 기준값과 무관하게 표시합니다.")
     st.write("분홍색 ▼: MACD(19,39,9) 0선 상향 돌파 후 양수 유지 중 오실레이터(MACD−시그널선)가 음수로 바뀐 봉. 가격·MACD 패널에 함께 표시합니다.")
     if removed:
         st.caption(f"당일 장중·미래 데이터 {removed}개는 분석에서 제외했습니다.")

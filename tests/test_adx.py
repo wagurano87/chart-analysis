@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import pandas as pd
-from analysis import directional_indicators,wilder_average
+from analysis import directional_indicators,wilder_average,di_buy_signals
 
 class ADXTests(unittest.TestCase):
     def test_wilder_seed_and_recursion(self):
@@ -26,3 +26,9 @@ class ADXTests(unittest.TestCase):
         result=directional_indicators(pd.DataFrame({'High':np.arange(60)+100,'Low':100-np.arange(60),'Close':[100]*60}))
         self.assertEqual(result.PlusDI.iloc[-1],0)
         self.assertEqual(result.MinusDI.iloc[-1],0)
+
+    def test_buy_cross_warmup_equality_and_repeated_crosses(self):
+        plus = pd.Series([np.nan, 25, 26, 20, 21, 22, 19, 23, np.nan, 30])
+        minus = pd.Series([20.] * len(plus))
+        self.assertEqual(di_buy_signals(plus, minus).tolist(),
+                         [False, False, False, False, True, False, False, True, False, False])

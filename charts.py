@@ -60,6 +60,17 @@ def chart_html(frame, timeframe, bins=32, adx_threshold=20):
     for name,color in [('PlusDI','#34d399'),('MinusDI','#f87171'),('ADX','#fbbf24'),('ADXR','#c084fc')]:
         fig.add_trace(go.Scatter(x=x,y=frame[name],name=name,line=dict(color=color,width=2),customdata=dates,
             hovertemplate='%{customdata}<br>'+name+': %{y:.2f}<extra></extra>'),row=7,col=1)
+    buy_positions = [i for i, value in enumerate(frame.DIBuySignal) if value]
+    for row, column in [(1, 'Low'), (7, 'PlusDI')]:
+        fig.add_trace(go.Scatter(
+            x=buy_positions, y=frame[column].iloc[buy_positions], mode='markers',
+            name='+DI 상향 돌파 매수 시그널',
+            marker=dict(symbol='triangle-up', size=14, color='#34d399',
+                        line=dict(color='#ffffff', width=1)),
+            customdata=[[dates[i], float(frame.PlusDI.iloc[i]), float(frame.MinusDI.iloc[i])]
+                        for i in buy_positions],
+            hovertemplate='%{customdata[0]}<br><b>매수 시그널 · +DI 상향 돌파</b><br>+DI %{customdata[1]:.2f}<br>−DI %{customdata[2]:.2f}<extra></extra>'
+        ), row=row, col=1)
     fig.add_hline(y=adx_threshold,line_dash='dot',line_color='#94a3b8',row=7,col=1)
     for value in (30, 70):
         fig.add_hline(y=value, line_dash='dot', line_color='#94a3b8', row=5, col=1)

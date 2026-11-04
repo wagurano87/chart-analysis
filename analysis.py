@@ -69,7 +69,13 @@ def indicators(frame, di_length=14, adx_length=14, adxr_length=14):
     result["VolumeAvg20"] = result.Volume.shift(1).rolling(20).mean()
     result["VolumeRatio"] = result.Volume / result.VolumeAvg20.replace(0, np.nan)
     result = result.join(directional_indicators(frame, di_length, adx_length, adxr_length))
+    result["DIBuySignal"] = di_buy_signals(result.PlusDI, result.MinusDI)
     return result
+
+
+def di_buy_signals(plus_di, minus_di):
+    """Signal only on a completed-bar crossover, never on warm-up or continuation."""
+    return (plus_di > minus_di) & (plus_di.shift(1) <= minus_di.shift(1))
 
 
 def oscillator_sell_signals(macd, histogram):
