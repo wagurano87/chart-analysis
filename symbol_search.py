@@ -146,8 +146,7 @@ def render_symbol_picker():
         latest_us, us_message = get_us_directory()
         if latest != directory or latest_us != us_directory:
             st.rerun()
-        st.caption(message)
-        st.caption(us_message)
+        st.caption('종목 목록 상태', help=f'**국내**\n\n{message}\n\n**미국**\n\n{us_message}')
         if st.button('목록 갱신 확인', key='check_listing_refresh'):
             st.rerun()
 
