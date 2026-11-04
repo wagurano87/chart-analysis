@@ -2,6 +2,9 @@
 import re
 
 COMMON = [
+    ('엘앤씨바이오', '290650', '한국', 'L&C Bio 엘앤씨 바이오'),
+    ('LG전자', '066570', '한국', 'LG Electronics 엘지전자'),
+    ('LG전자우', '066575', '한국', 'LG Electronics preferred 엘지전자우'),
     ('대한광통신', '010170', '한국', 'Taihan Fiberoptics'),
     ('삼성전자', '005930', '한국', 'Samsung Electronics'),
     ('삼성전자우', '005935', '한국', 'Samsung Electronics preferred'),
