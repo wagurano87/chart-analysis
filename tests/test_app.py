@@ -22,6 +22,33 @@ class AppTests(unittest.TestCase):
                 with self.assertRaises(KeyError):
                     app.session_state['favorite_requested']
 
+    def test_four_hour_switch_and_failure_recovery(self):
+        import pandas as pd
+        intraday = demo_prices().tail(400).copy()
+        intraday.index = pd.date_range('2025-01-01', periods=400, freq='4h')
+        with patch('market_data.fetch_prices', return_value=(demo_prices(), '바이낸스 · SOLUSDT', 'SOLUSDT')), patch('crypto_data.fetch_crypto', return_value=(intraday, '바이낸스 · SOLUSDT', 'SOLUSDT')):
+            app = AppTest.from_file(APP, default_timeout=30).run()
+            app.selectbox(key='analysis_market').select('바이낸스')
+            app.text_input(key='analysis_ticker').set_value('SOLUSDT')
+            next(b for b in app.button if b.label == '분석하기').click().run()
+            app.radio(key='chart_timeframe').set_value('4시간봉').run()
+            self.assertFalse(app.exception)
+            self.assertEqual(len(app.get('iframe')), 1)
+            self.assertTrue(any('4시간봉 · 마지막 완료 봉' in c.value for c in app.caption))
+            self.assertTrue('2025-01-01 04:00' in app.get('iframe')[0].proto.srcdoc)
+            app.radio(key='chart_timeframe').set_value('주봉').run()
+            self.assertFalse(app.exception)
+            self.assertEqual(len(app.get('iframe')), 1)
+        with patch('market_data.fetch_prices', return_value=(demo_prices(), '바이낸스 · FAILUSDT', 'FAILUSDT')), patch('crypto_data.fetch_crypto', side_effect=RuntimeError('연결 실패 테스트')):
+            app.text_input(key='analysis_ticker').set_value('FAILUSDT')
+            next(b for b in app.button if b.label == '분석하기').click().run()
+            app.radio(key='chart_timeframe').set_value('4시간봉').run()
+            self.assertFalse(app.exception)
+            self.assertEqual(len(app.get('iframe')), 0)
+            self.assertTrue(any('연결 실패 테스트' in e.value for e in app.error))
+            app.radio(key='chart_timeframe').set_value('일봉').run()
+            self.assertEqual(len(app.get('iframe')), 1)
+
     def test_startup_with_old_data_module_present(self):
         import sys
         import types

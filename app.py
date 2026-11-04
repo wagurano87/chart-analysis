@@ -121,12 +121,12 @@ last, prev = frame.iloc[-1], frame.iloc[-2]
 signal = assess(frame)
 with summary:
     st.subheader("가상 데이터 체험" if tv_symbol is None else f"{market} · {ticker.upper()}")
-    excluded_prices = daily.attrs.get('excluded_price_dates', [])
+    excluded_prices = daily.attrs.get('excluded_price_dates', []) if timeframe != '4시간봉' else []
     if excluded_prices:
         st.warning(f"제공처의 잘못된 가격 데이터 {len(excluded_prices)}개 봉을 제외했습니다. 누락 봉 때문에 지표가 원본과 달라질 수 있습니다.")
         with st.expander('제외된 시세 날짜 확인'):
             st.write(', '.join(excluded_prices))
-    if daily.attrs.get('rounded_price_rows', 0):
+    if timeframe != '4시간봉' and daily.attrs.get('rounded_price_rows', 0):
         st.caption(f"수정주가 계산의 미세 오차 {daily.attrs['rounded_price_rows']}개 봉을 보정했습니다.")
     st.caption(f"{provider} · {timeframe} · 마지막 완료 봉 {frame.index[-1]:%Y-%m-%d %H:%M} · {len(frame):,}개 봉")
     if timeframe == "4시간봉":
@@ -145,7 +145,7 @@ st.caption(f'ADX·ADXR·DI 설정: DI {di_length} / ADX {adx_length} / ADXR {adx
 st.caption("▼ 매도 주의 시그널 · 우측 VRVP는 표시 구간의 OHLCV로 추정한 거래량 분포이며 노란 막대는 추정 POC입니다.")
 sell_events = frame.loc[frame.MACD19SellSignal]
 with st.expander("차트 조작·데이터 안내"):
-    st.write("차트 바로 위에서 일봉·주봉을 선택하세요. 최근 60봉·180봉·전체 버튼으로 범위를 바꿀 수 있습니다. 이동·확대·추세선·사각형·지우기·PNG 저장 도구를 제공합니다. 그린 선·사각형은 클릭해 선택한 뒤 Delete 키 또는 지우기 · Del 버튼으로 삭제합니다. 방금 그린 도형은 자동 선택되며 Esc로 선택을 해제합니다. 휠로 확대하고, 기본 보기로 최근 60봉에 돌아옵니다.")
+    st.write("차트 바로 위에서 일봉·주봉·4시간봉을 선택하세요. 최근 60봉·180봉·전체 버튼으로 범위를 바꿀 수 있습니다. 이동·확대·추세선·사각형·지우기·PNG 저장 도구를 제공합니다. 그린 선·사각형은 클릭해 선택한 뒤 Delete 키 또는 선택 삭제 버튼으로 삭제합니다. 방금 그린 도형은 자동 선택되며 Esc로 선택을 해제합니다. 휠로 확대하고, 기본 보기로 최근 60봉에 돌아옵니다.")
     st.write("모바일 도형 삭제: 도형 선택 목록에서 피보나치·추세선 등을 고른 뒤 선택 삭제를 누르세요. 도형 전체 삭제는 직접 그린 도형만 한 번에 지웁니다. 한 번 그린 뒤에는 자동으로 이동 모드로 돌아옵니다.")
     st.write("모바일: 이동 도구에서 차트 안에 두 손가락을 대고 벌리면 확대, 모으면 축소됩니다. 한 손가락은 페이지 스크롤입니다. 그리기 도구 사용 후에는 이동을 선택하세요.")
     st.write("피보나치: 버튼 선택 후 가격 차트에서 시작점부터 끝점까지 드래그하세요. 끝점 0%·시작점 100% 기준으로 되돌림 가격을 표시합니다. 점선 기준선을 선택한 뒤 Delete를 누르면 전체 삭제됩니다. 클릭한 가격을 사용하며 고가·저가 자동 맞춤은 하지 않습니다.")

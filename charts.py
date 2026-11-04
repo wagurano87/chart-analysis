@@ -349,7 +349,7 @@ document.querySelectorAll('#range-toolbar button').forEach(button => {
 document.getElementById('fit-price').addEventListener('click',()=>updateProfile(gd.layout.xaxis.range,true));
 function updateProfile(range, fitPrice=true) {
     const lo = Math.max(0, Math.ceil(Number(range[0]))), hi = Math.min(records.length-1, Math.floor(Number(range[1])));
-    const visible = records.slice(lo, hi+1);
+    const visible = hi>=lo ? records.slice(lo, hi+1) : [];
     document.querySelectorAll('#range-toolbar button').forEach(button => {
         const count = button.dataset.count === 'all' ? records.length : Math.min(records.length,Number(button.dataset.count));
         button.setAttribute('aria-pressed',String(hi===records.length-1 && visible.length===count));
@@ -357,7 +357,11 @@ function updateProfile(range, fitPrice=true) {
     if (!visible.length) {
         window.__volumeProfile = {first:lo,last:hi,volumes:[],centers:[],total:0,poc:null};
         document.getElementById('profile-status').textContent = '선택 범위에 봉이 없습니다.';
-        Plotly.restyle(gd, {x:[[]], y:[[]]}, [profileIndex]); return;
+        document.getElementById('drawdown-status').textContent='선택 범위에 최고·최저가 정보가 없습니다.';
+        const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('extreme-'));
+        busy=true;
+        Plotly.update(gd,{x:[[]],y:[[]]},{annotations},[profileIndex]).finally(()=>{busy=false;});
+        return;
     }
     let min = visible.reduce((v,r)=>Math.min(v,r[0]),Infinity), max = visible.reduce((v,r)=>Math.max(v,r[1]),-Infinity);
     const visiblePeak=max, visibleLow=min;
@@ -388,7 +392,7 @@ function updateProfile(range, fitPrice=true) {
     const pad=(priceMax-priceMin)*.05;
     const ticks=[]; for(let i=lo;i<=hi;i+=Math.max(1,Math.ceil((hi-lo+1)/Math.max(3,Math.floor(gd.clientWidth/130))))) ticks.push(i);
     const update={'xaxis2.autorange':true};
-    if(fitPrice) update['yaxis.range']=[priceMin-pad,priceMax+pad];
+    if(fitPrice) {update['yaxis.range']=[priceMin-pad,priceMax+pad];update['yaxis6.range']=[0,100];}
     const lastClose=ohlc[ohlc.length-1][3];
     const troughIndex=lo+visible.findIndex(row=>row[0]===visibleLow);
     const annotations=(gd.layout.annotations || []).filter(a=>!String(a.name || '').startsWith('extreme-'));
