@@ -11,6 +11,10 @@ class AppTests(unittest.TestCase):
     def setUp(self):
         directory = patch('symbol_search.get_directory', return_value=(
             [{'name': '목록테스트기업', 'code': '123456', 'exchange': '코스닥'}], 'KIND 테스트 목록'))
+        us_directory = patch('symbol_search.get_us_directory', return_value=(
+            [{'name': 'Example Corporation', 'code': 'EXMP', 'exchange': 'NYSE', 'kind': '주식/증권'}], '미국 테스트 목록'))
+        us_directory.start()
+        self.addCleanup(us_directory.stop)
         directory.start()
         self.addCleanup(directory.stop)
 

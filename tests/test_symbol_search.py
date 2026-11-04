@@ -8,6 +8,10 @@ class SearchTests(unittest.TestCase):
     def setUp(self):
         directory = patch('symbol_search.get_directory', return_value=(
             [{'name': '목록테스트기업', 'code': '123456', 'exchange': '코스닥'}], 'KIND 테스트 목록'))
+        us_directory = patch('symbol_search.get_us_directory', return_value=(
+            [{'name': 'Example Corporation', 'code': 'EXMP', 'exchange': 'NYSE', 'kind': '주식/증권'}], '미국 테스트 목록'))
+        us_directory.start()
+        self.addCleanup(us_directory.stop)
         directory.start()
         self.addCleanup(directory.stop)
 
@@ -35,7 +39,7 @@ class SearchTests(unittest.TestCase):
         self.assertEqual([v[1] for v in result],['000660','TEST'])
     def test_apply_updates_market_and_ticker(self):
         app=AppTest.from_file(str(Path(__file__).resolve().parents[1]/'app.py')).run()
-        for query, code, market in [('인텔', 'INTC', '미국'), ('삼성전자 ·', '005930', '한국'), ('엘앤씨바이오 ·', '290650', '한국'), ('LG전자 ·', '066570', '한국'), ('목록테스트기업 ·', '123456', '한국')]:
+        for query, code, market in [('인텔', 'INTC', '미국'), ('삼성전자 ·', '005930', '한국'), ('엘앤씨바이오 ·', '290650', '한국'), ('LG전자 ·', '066570', '한국'), ('목록테스트기업 ·', '123456', '한국'), ('Example Corporation ·', 'EXMP', '미국')]:
             picker=app.selectbox(key='symbol_entry')
             label=next(v for v in picker.options if v.startswith(query))
             picker.select(label).run()

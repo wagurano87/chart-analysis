@@ -1,6 +1,7 @@
 """Small offline alias list plus Yahoo search for other listed instruments."""
 import re
 from korean_listings import get_directory
+from us_listings import get_directory as get_us_directory
 
 COMMON = [
     ('엘앤씨바이오', '290650', '한국', 'L&C Bio 엘앤씨 바이오'),
@@ -62,6 +63,11 @@ def search_symbols(query):
                 if key in compact(row['name']) or key in row['code']]
     if domestic:
         return domestic, 'KIND 국내 상장사 목록'
+    us_directory, _ = get_us_directory()
+    us_matches = [(row['name'], row['code'], '미국', row['kind']) for row in us_directory
+                  if key in compact(row['name']) or key in compact(row['code'])]
+    if us_matches:
+        return us_matches, 'Nasdaq Trader 미국 상장 종목 목록'
     import yfinance as yf
     try:
         results=normalize_quotes(yf.Search(query,max_results=20,news_count=0,timeout=10).quotes)
@@ -79,6 +85,10 @@ def render_symbol_picker():
     known = {code for _, code, market, _ in COMMON if market == '한국'}
     entries.update({f"{row['name']} · {row['code']} · 한국 · {row['exchange']}": (row['code'], '한국')
                     for row in directory if row['code'] not in known})
+    us_directory, _ = get_us_directory()
+    known_us = {code for _, code, market, _ in COMMON if market == '미국'}
+    entries.update({f"{row['name']} · {row['code']} · 미국 · {row['exchange']} · {row['kind']}": (row['code'], '미국')
+                    for row in us_directory if row['code'] not in known_us})
     entries.update({f'{code} · {market}': (code, market)
                     for code, market in [('BTCUSDT', '바이낸스'), ('ETHUSDT', '바이낸스'),
                                          ('KRW-BTC', '업비트'), ('KRW-ETH', '업비트')]})
@@ -134,9 +144,11 @@ def render_symbol_picker():
     @st.fragment(run_every='30s')
     def directory_status():
         latest, message = get_directory()
-        if latest != directory:
+        latest_us, us_message = get_us_directory()
+        if latest != directory or latest_us != us_directory:
             st.rerun()
         st.caption(message)
+        st.caption(us_message)
         if st.button('목록 갱신 확인', key='check_listing_refresh'):
             st.rerun()
 
