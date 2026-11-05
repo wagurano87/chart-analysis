@@ -8,6 +8,7 @@ import pandas as pd
 
 MA_WINDOWS = (10, 20, 60, 120, 200, 365)
 
+# 시가(Open)·고가(High)·저가(Low)·종가(Close)·거래량(Volume)을 검사합니다. 잘못된 가격으로 신호를 계산하지 않도록 막는 입구입니다.
 def validate_prices(frame, normalize_dates=True):
     frame = frame.copy()
     required = ["Open", "High", "Low", "Close", "Volume"]
@@ -32,6 +33,7 @@ def validate_prices(frame, normalize_dates=True):
     return frame
 
 
+# 아직 끝나지 않은 일봉을 제외합니다. 코인은 UTC 날짜, 주식은 해당 국가의 보수적인 마감 확인 시간을 사용합니다.
 def completed_daily_bars(frame, market, now=None):
     """Conservatively omit today's daily bar until after regular-session close."""
     if market in {'바이낸스','업비트'}:
@@ -47,6 +49,7 @@ def completed_daily_bars(frame, market, now=None):
     return frame.loc[allowed].copy()
 
 
+# 가격 표에 이동평균·MACD·RSI·OBV·DI 등의 계산 결과 열을 붙입니다. 외부 서버와 통신하지 않는 계산 전용 함수입니다.
 def indicators(frame, di_length=14, adx_length=14, adxr_length=14):
     if len(frame) < 120:
         raise ValueError("안정적인 지표 계산을 위해 선택한 주기의 완료된 봉이 최소 120개 필요합니다. 주봉은 약 3년 이상의 일봉을 입력하세요.")
@@ -73,11 +76,13 @@ def indicators(frame, di_length=14, adx_length=14, adxr_length=14):
     return result
 
 
+# 이전 봉에서는 +DI가 아래/동률이고 이번 봉에서 위로 올라온 순간만 True입니다. 위에 머무는 동안 반복 신호를 만들지 않습니다.
 def di_buy_signals(plus_di, minus_di):
     """Signal only on a completed-bar crossover, never on warm-up or continuation."""
     return (plus_di > minus_di) & (plus_di.shift(1) <= minus_di.shift(1))
 
 
+# MACD가 0을 상향 돌파한 이력이 있어야 매도 조건을 활성화합니다. MACD가 양수인 동안 히스토그램이 음수로 바뀌면 신호를 냅니다.
 def oscillator_sell_signals(macd, histogram):
     """Negative histogram crosses within an observed positive MACD regime.
 
@@ -99,6 +104,7 @@ def oscillator_sell_signals(macd, histogram):
     return signals
 
 
+# 종가의 상승폭과 하락폭을 Wilder 방식으로 부드럽게 평균내 RSI를 구합니다. 시작 구간은 데이터 부족으로 비어 있습니다.
 def rsi(close, period=14):
     """Wilder smoothing seeded with the first period's simple average."""
     changes = close.diff()
@@ -116,6 +122,7 @@ def rsi(close, period=14):
     return output
 
 
+# 여러 일봉을 주봉 하나로 합칩니다. 첫 시가·최고 고가·최저 저가·마지막 종가·거래량 합을 사용합니다.
 def resample_bars(daily, market, timeframe, now=None):
     if timeframe == "일봉":
         return daily.copy()
@@ -153,6 +160,7 @@ def resample_bars(daily, market, timeframe, now=None):
     return weekly.loc[available]
 
 
+# 마지막 완료 봉의 MACD와 거래량을 보고 안내용 위험 수준과 근거를 반환합니다. 매매 주문을 실행하지 않습니다.
 def assess(frame):
     last, prev = frame.iloc[-1], frame.iloc[-2]
     falling = bool(last.MACD < prev.MACD)
@@ -193,6 +201,7 @@ def assess(frame):
             "distribution": distribution, "below_signal": below_signal}
 
 
+# 처음에는 단순 평균으로 시작하고 이후 이전 평균에 새 값을 조금씩 반영합니다. ADX 계산의 공통 평활 함수입니다.
 def wilder_average(series, length):
     if not isinstance(length, int) or length < 1:
         raise ValueError('지표 기간은 1 이상의 정수여야 합니다.')
@@ -213,6 +222,7 @@ def wilder_average(series, length):
     return output
 
 
+# 고가·저가의 방향 움직임과 가격 변동폭을 이용해 +DI·−DI·ADX·ADXR을 계산합니다.
 def directional_indicators(frame, length=14, adx_length=14, adxr_length=14):
     if not isinstance(adxr_length,int) or adxr_length<1:
         raise ValueError('ADXR 기간은 1 이상의 정수여야 합니다.')

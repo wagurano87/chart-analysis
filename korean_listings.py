@@ -36,6 +36,7 @@ class TableParser(HTMLParser):
             self.rows.append(self.row)
 
 
+# KIND의 엑셀 다운로드는 실제로 HTML 표입니다. 한글 인코딩을 해석하고 회사명·6자리 코드를 추출합니다.
 def parse_listing(payload, market):
     # KIND serves an HTML table as an Excel download, normally encoded EUC-KR.
     try:
@@ -58,6 +59,7 @@ def parse_listing(payload, market):
     return result
 
 
+# 비어 있거나 일부 시장만 온 응답으로 정상 목록을 덮어쓰지 않도록 검사합니다. 최소 개수는 완전성을 보장하는 것이 아니라 명백한 실패를 거르는 장치입니다.
 def validate_snapshot(data):
     validate_timestamp(data)
     rows = data.get('rows', [])
@@ -76,6 +78,7 @@ def validate_snapshot(data):
     return data
 
 
+# 코스피·코스닥·코넥스 목록을 각각 받아 하나로 합칩니다. 실제 시세가 아니라 검색용 회사 목록입니다.
 def download_snapshot():
     rows = []
     for market, market_type in MARKETS.items():
@@ -90,5 +93,6 @@ def download_snapshot():
 _cache = ListingCache(CACHE, download_snapshot, validate_snapshot, '국내 상장사 · KIND')
 
 
+# 공통 캐시에 현재 목록을 요청합니다. 오래된 경우 다운로드는 별도 작업으로 진행하므로 화면을 오래 멈추지 않습니다.
 def get_directory():
     return _cache.get()

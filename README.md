@@ -1,5 +1,7 @@
 # Chart Analysis
 
+> **구독 재개·작업 인수인계:** [HANDOFF.md](HANDOFF.md)부터 읽어 주세요. 파일별 설명과 소스 읽는 순서는 [SOURCE_GUIDE.md](SOURCE_GUIDE.md)에 있습니다.
+
 한국·미국 주식 종목을 입력하면 자체 분석 차트로 **일봉·주봉, MACD(6,19,9)·MACD(19,39,9), RSI, OBV, 추정 VRVP**을 보여주는 Python/Streamlit 웹앱입니다. 브라우저로 사용하며 자동 매매나 증권 계좌 연결은 하지 않습니다.
 
 ## 설치 없이 웹으로 사용하기

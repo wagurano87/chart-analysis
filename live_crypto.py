@@ -5,6 +5,7 @@ from analysis import indicators, completed_daily_bars, resample_bars, validate_p
 from crypto_data import fetch_crypto, completed_four_hour_bars
 
 
+# 기존 이력에 최신 봉을 합칩니다. 같은 시작 시각의 봉은 최신 값으로 교체해 중복 봉을 막습니다.
 def merge_recent(history, recent):
     if recent.empty:
         raise ValueError('최근 시세가 없습니다.')
@@ -15,6 +16,7 @@ def merge_recent(history, recent):
     return validate_prices(merged.loc[~merged.index.duplicated(keep='last')].sort_index(), normalize_dates=False)
 
 
+# 진행 중인 봉까지 지표를 계산하지만 미완료 봉의 매수·매도 표시는 False로 보류합니다.
 def live_indicators(raw, timeframe, market, di_length, adx_length, adxr_length, now=None):
     current = pd.Timestamp.now(tz='UTC') if now is None else pd.Timestamp(now)
     current = current.tz_localize('UTC') if current.tzinfo is None else current.tz_convert('UTC')
@@ -37,6 +39,7 @@ def live_indicators(raw, timeframe, market, di_length, adx_length, adxr_length, 
     return frame, int((~confirmed).sum())
 
 
+# 차트를 다시 만들지 않고 데이터 메시지를 전달하는 작은 iframe을 만듭니다. 같은 출처의 차트에만 보내며 JSON을 HTML에 안전하게 넣습니다.
 def message_html(message):
     # Escape HTML parser delimiters; the payload contains no executable source.
     encoded = json.dumps(message, ensure_ascii=True).replace('<', '\\u003c')
@@ -56,6 +59,7 @@ timer=setInterval(send,500);send();setTimeout(()=>clearInterval(timer),9000);
 </script>'''.replace('PAYLOAD', encoded)
 
 
+# 10초 fragment는 이 부분만 재실행합니다. 전체 앱을 새로 그리지 않아 확대 위치와 도형을 유지할 수 있습니다.
 def render_live_updates(seed, ticker, market, timeframe, bins, threshold, lengths, token):
     import streamlit as st
     from charts import live_payload

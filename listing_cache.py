@@ -12,6 +12,7 @@ DAY = 86400
 RETRY = 3600
 
 
+# 캐시의 갱신 시간이 숫자인지, 무한대나 비정상적인 미래 시각은 아닌지 검사합니다.
 def validate_timestamp(data):
     stamp = data.get('updated_at') if isinstance(data, dict) else None
     if (not isinstance(stamp, (float, int)) or not math.isfinite(stamp)
@@ -20,6 +21,7 @@ def validate_timestamp(data):
 
 
 class ListingCache:
+    # 각 시장 목록마다 저장 위치·다운로드 함수·검사 함수를 받아 독립된 캐시를 만듭니다. Lock은 동시에 상태를 수정하는 충돌을 막습니다.
     def __init__(self, path, download, validate, label):
         self.path = Path(path)
         self.download = download
@@ -33,6 +35,7 @@ class ListingCache:
         self.failed = False
         self.disk_failed = False
 
+    # 새 목록을 검증한 뒤 임시 파일을 정상 파일로 교체합니다. 다운로드 실패 시 이전 목록을 유지하고, 디스크 저장 실패 시 새 목록을 메모리에서 사용합니다.
     def refresh(self):
         try:
             data = self.validate(self.download())
@@ -54,6 +57,7 @@ class ListingCache:
             self.failed = False
             self.disk_failed = disk_failed
 
+    # 현재 목록을 즉시 돌려주고 필요하면 배경 갱신을 시작합니다. 앱이 꺼져 있을 때도 작동하는 별도 예약 서버는 아닙니다.
     def get(self):
         now = time.time()
         with self.lock:

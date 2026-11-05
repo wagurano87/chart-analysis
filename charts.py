@@ -6,6 +6,7 @@ from plotly.subplots import make_subplots
 from analysis import MA_WINDOWS
 
 
+# Python에서 캔들·거래량·보조지표를 담은 Plotly 그래프를 만듭니다. 실제 클릭·드래그 처리는 아래 JavaScript가 맡습니다.
 def chart_figure(frame, timeframe, bins=32, adx_threshold=20):
     x = list(range(len(frame)))
     dates = frame.index.strftime('%Y-%m-%d %H:%M' if timeframe=='4시간봉' else '%Y-%m-%d').tolist()
@@ -129,6 +130,7 @@ def chart_figure(frame, timeframe, bins=32, adx_threshold=20):
 SERIES_COLUMNS = ['Volume','MACD6','Signal6','Histogram6','MACD','Signal','Histogram','OBV','RSI','VolumeAvg20','PlusDI','MinusDI','ADX','ADXR']
 
 
+# 실시간 갱신에 필요한 숫자·날짜·그래프 데이터만 JSON으로 묶습니다. 서버의 Python 객체를 브라우저가 읽을 수 있는 형태로 바꿉니다.
 def live_payload(frame, timeframe, bins=32, adx_threshold=20):
     fig = chart_figure(frame, timeframe, bins, adx_threshold)
     return {
@@ -141,6 +143,7 @@ def live_payload(frame, timeframe, bins=32, adx_threshold=20):
     }
 
 
+# 그래프·도구막대·JavaScript를 독립 HTML 문서로 만듭니다. Streamlit은 이 문서를 iframe 안에 표시합니다.
 def chart_html(frame, timeframe, bins=32, adx_threshold=20, live_token=None):
     fig = chart_figure(frame, timeframe, bins, adx_threshold)
     dates = frame.index.strftime('%Y-%m-%d %H:%M' if timeframe=='4시간봉' else '%Y-%m-%d').tolist()
@@ -165,6 +168,7 @@ let selectedShape = null;
 let deletingShape = false;
 let measuring = false;
 let fibonacci = false;
+// 사용자가 그린 측정 사각형·피보나치의 좌표를 읽어 가격·비율 설명을 다시 만듭니다.
 function refreshMeasurements() {
     const annotations=(gd.layout.annotations || []).filter(a=>!/^measure-|^fib-/.test(String(a.name || '')));
     (gd.layout.shapes || []).forEach((shape,i)=>{
@@ -197,6 +201,7 @@ function refreshMeasurements() {
 
 gd.tabIndex = 0;
 gd.setAttribute('aria-label','분석 차트. 추세선 선택 후 Delete로 삭제, Escape로 선택 해제');
+// 선택된 도형을 눈에 띄게 하고 모바일 삭제 목록을 맞춥니다.
 function showShapeSelection() {
     gd.querySelectorAll('.shape-group[data-index]').forEach(node=>{
         node.classList.toggle('selected-drawing', Number(node.dataset.index)===selectedShape);
@@ -259,6 +264,7 @@ gd.on('plotly_relayout',event=>{
     showShapeSelection();
     refreshMeasurements();
 });
+// 사용자 도형만 삭제합니다. 기준선 등 처음부터 있던 도형은 보호합니다.
 async function deleteSelectedShape() {
     const index=selectedShape, shapes=gd.layout.shapes || [];
     if(deletingShape || index===null || index<protectedShapeCount || index>=shapes.length) return;
@@ -294,6 +300,7 @@ document.getElementById('clear-drawings').addEventListener('click',async()=>{
 showShapeSelection();
 const number = (n, digits=2) => n===null || !Number.isFinite(n) ? '—' :
     Number(n).toLocaleString('ko-KR',{maximumFractionDigits:digits});
+// 마우스가 가리키는 봉의 가격·지표 수치를 차트 위에 보여줍니다.
 function showCandle(index) {
     const i=Math.min(ohlc.length-1,Math.max(0,Math.round(index))), row=ohlc[i];
     const f=n=>Number(n).toLocaleString(undefined,{maximumFractionDigits:2});
@@ -381,6 +388,7 @@ document.querySelectorAll('#range-toolbar button').forEach(button => {
     });
 });
 document.getElementById('fit-price').addEventListener('click',()=>updateProfile(gd.layout.xaxis.range,true));
+// 현재 보이는 봉만으로 가격대별 거래량(VRVP)을 추정합니다. 실제 체결가별 거래량은 아닙니다.
 function updateProfile(range, fitPrice=true) {
     const lo = Math.max(0, Math.ceil(Number(range[0]))), hi = Math.min(records.length-1, Math.floor(Number(range[1])));
     const visible = hi>=lo ? records.slice(lo, hi+1) : [];
@@ -445,6 +453,7 @@ function updateProfile(range, fitPrice=true) {
     Plotly.update(gd,profileUpdate,update,[profileIndex]).finally(()=>{busy=false;});
 }
 let profileTimer;
+// 연속 스크롤마다 무거운 계산을 하지 않고 잠깐 기다렸다 마지막 범위를 계산합니다.
 function scheduleProfile(range) {
     clearTimeout(profileTimer);
     profileTimer=setTimeout(()=>{if(busy) scheduleProfile(range); else {const fit=fitNextRange;fitNextRange=false;updateProfile(range,fit);}},140);
@@ -469,6 +478,7 @@ function boundedRange(left,width) {
     left=Math.max(-5.5,Math.min(records.length+4.5-width,left));
     return [left,left+width];
 }
+// 휠 이벤트를 화면 갱신 주기에 맞춰 묶어 처리해 불필요한 반복 그리기를 줄입니다.
 function renderWheel() {
     wheelFrame=null;
     if(!wheelTarget && !Object.keys(verticalTargets).length) return;
@@ -498,6 +508,7 @@ document.addEventListener('pointerdown',()=>{
 },true);
 // Explicit hit targets cover the actual tick labels, including label overflow.
 const verticalAxes=['yaxis','yaxis3','yaxis4','yaxis5','yaxis6','yaxis7','yaxis8'];
+// 세로축 숫자 위에 드래그·휠 입력 영역을 배치합니다.
 function positionAxisControls() {
     const layout=gd._fullLayout;
     if(!layout) return;
@@ -638,6 +649,7 @@ function endPinch(event) {
 gd.addEventListener('touchend',endPinch,{capture:true});
 gd.addEventListener('touchcancel',event=>{pinch=null;finishingPinch=false;},{capture:true});
 let fitFrame;
+// 도구막대 높이를 제외한 남은 공간에 차트를 맞춰 내부 스크롤바를 막습니다.
 function fitChartFrame() {
     cancelAnimationFrame(fitFrame);
     fitFrame=requestAnimationFrame(()=>{
@@ -666,6 +678,7 @@ window.addEventListener('message', event=>{
     pendingLive=data;
     event.source?.postMessage({type:'chart-live-ack',token:liveToken},channelOrigin);
 });
+// 새 시세만 적용하고 기존 축 범위·도형은 유지합니다. 최신 구간을 보고 있을 때만 새 봉을 따라갑니다.
 async function applyLive() {
     if(!pendingLive || applyingLive || busy || wheelDrawing || pinch || gd._dragging) return;
     const data=pendingLive;

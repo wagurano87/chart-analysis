@@ -27,6 +27,7 @@ COMMON = [
 ]
 
 
+# 외부 검색 결과 중 지원하는 시장과 종목 종류만 골라 코드·이름 형태를 통일합니다.
 def normalize_quotes(quotes):
     results=[]
     seen=set()
@@ -48,6 +49,7 @@ def normalize_quotes(quotes):
     return results
 
 
+# 기본 별칭과 국내·미국 목록을 먼저 함께 검색하고, 없을 때 Yahoo 검색을 시도합니다. 같은 시장·코드는 중복 제거합니다.
 def search_symbols(query):
     query=query.strip()
     if not query or len(query)>80:
@@ -75,6 +77,7 @@ def search_symbols(query):
     return results, 'Yahoo Finance 검색 · 한국·미국 주식/ETF만 표시합니다. 결과가 없으면 영문명 또는 코드를 입력하세요.'
 
 
+# Streamlit 검색 입력창과 도움말을 만듭니다. 후보 선택 시 시장과 코드를 함께 저장합니다.
 def render_symbol_picker():
     """One searchable input for aliases, codes and remote search results."""
     import streamlit as st

@@ -11,6 +11,7 @@ from analysis import validate_prices
 CRYPTO_MARKETS = {'바이낸스', '업비트'}
 
 
+# 거래소마다 다른 거래쌍 형식을 정리합니다. 예: 바이낸스 BTCUSDT, 업비트 KRW-BTC.
 def crypto_symbol(value, market):
     value=value.strip().upper()
     if market == '바이낸스':
@@ -24,12 +25,14 @@ def crypto_symbol(value, market):
     return value
 
 
+# 공개 HTTPS 주소에 GET 요청을 보내 JSON을 읽습니다. API 키나 주문 권한은 사용하지 않습니다.
 def _get(url, params):
     request=Request(url+'?'+urlencode(params),headers={'User-Agent':'ChartAnalysis/1.0'})
     with urlopen(request,timeout=15) as response:
         return json.load(response)
 
 
+# 거래소가 한 번에 주는 개수에 제한이 있어 필요하면 여러 페이지를 받습니다. 일부 페이지만 받은 상태에서 실패하면 분석을 중단합니다.
 def fetch_crypto(value, market, limit=1500, interval="1d"):
     if interval not in {"1d", "4h"}:
         raise ValueError("지원하지 않는 코인 주기입니다.")
@@ -79,6 +82,7 @@ def fetch_crypto(value, market, limit=1500, interval="1d"):
     return validate_prices(frame, normalize_dates=interval=="1d"), f'{market} · {symbol}', symbol
 
 
+# 가격이 어떤 통화로 표시되는지 구합니다. BTCUSDT의 가격 단위는 USDT입니다.
 def quote_currency(value,market):
     symbol=crypto_symbol(value,market)
     if market=='업비트': return symbol.split('-')[0]
@@ -87,6 +91,7 @@ def quote_currency(value,market):
     return '호가 통화'
 
 
+# 시작 시각에서 4시간이 지나야 완료된 봉으로 인정합니다. 거래소 응답의 시간은 UTC 기준입니다.
 def completed_four_hour_bars(frame, now=None):
     current=pd.Timestamp.now(tz='UTC') if now is None else pd.Timestamp(now)
     current=current.tz_localize('UTC') if current.tzinfo is None else current.tz_convert('UTC')

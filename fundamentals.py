@@ -3,6 +3,7 @@ import math
 import pandas as pd
 
 
+# 제공된 분기 손익계산서를 날짜순으로 정리하고 영업이익률을 계산합니다. 없는 분기나 값을 만들어 채우지 않습니다.
 def quarterly_metrics(statement):
     if statement.empty:
         raise ValueError('제공처에 분기 재무제표가 없습니다.')
@@ -16,6 +17,7 @@ def quarterly_metrics(statement):
     return result.replace([float('inf'), -float('inf')], float('nan'))
 
 
+# PEG처럼 양수이고 유한한 값만 의미 있는 지표로 받습니다. 제공되지 않은 값은 None으로 처리합니다.
 def positive_number(value):
     try:
         number = float(value)
@@ -28,6 +30,7 @@ class UnsupportedFinancials(ValueError):
     """A fund does not publish company operating results."""
 
 
+# Yahoo에서 분기 실적과 최신 PEG를 읽습니다. ETF·펀드 등 기업 실적 분석 대상이 아닌 경우 안내를 반환합니다.
 def fetch_fundamentals(symbol):
     import yfinance as yf
     ticker = yf.Ticker(symbol)
@@ -54,6 +57,7 @@ def fetch_fundamentals(symbol):
     return financials, info.get('financialCurrency'), positive_number(info.get('trailingPegRatio'))
 
 
+# 버튼을 눌렀을 때만 실적을 조회하고 한 줄에 그래프 두 개씩 배치합니다. 시세 차트를 재무 조회 실패로 막지 않습니다.
 def render_fundamentals(symbol, mode):
     import streamlit as st
     import plotly.graph_objects as go

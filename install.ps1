@@ -1,3 +1,4 @@
+# 최초 설치: 현재 폴더에 독립 Python 환경(.venv)을 만들고 필요한 라이브러리를 설치합니다.
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 $python = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'

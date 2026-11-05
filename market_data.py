@@ -7,6 +7,7 @@ import pandas as pd
 from analysis import validate_prices
 
 
+# 사용자가 넣은 코드를 검증하고 Yahoo가 사용하는 형식으로 바꿉니다. 한국은 코스피(.KS)와 코스닥(.KQ) 후보를 만듭니다.
 def symbols(value, market, exchange="NASDAQ"):
     value = value.strip().upper()
     if market == "한국":
@@ -20,6 +21,7 @@ def symbols(value, market, exchange="NASDAQ"):
     return [value.replace(".", "-")], exchange + ":" + value.replace("-", ".")
 
 
+# 주식은 Yahoo, 코인은 거래소 어댑터에 맡깁니다. 한국의 첫 거래소 후보가 실패하면 다음 후보도 확인합니다.
 def fetch_prices(value, market, exchange):
     from crypto_data import CRYPTO_MARKETS, fetch_crypto
     if market in CRYPTO_MARKETS:
@@ -45,6 +47,7 @@ def fetch_prices(value, market, exchange):
     raise ValueError("일봉을 받지 못했습니다. 종목코드, 제공처 장애 또는 네트워크 제한을 확인하세요. CSV 입력도 지원합니다.")
 
 
+# 온라인 시세의 아주 작은 반올림 오차만 보정하고, 그 외 모순된 봉은 제외 사실을 기록합니다. 임의 가격을 만들어 채우지 않습니다.
 def prepare_online_prices(frame):
     """Tolerate float rounding only; exclude inconsistent online candles explicitly."""
     frame = frame.copy()
@@ -73,6 +76,7 @@ def prepare_online_prices(frame):
     return frame
 
 
+# 업로드한 CSV의 Date 열을 날짜 인덱스로 바꾸고 가격 검사를 거칩니다. CSV는 프로그램 코드로 실행되지 않습니다.
 def read_csv(file):
     frame = pd.read_csv(file)
     if "Date" not in frame.columns:
@@ -80,6 +84,7 @@ def read_csv(file):
     return validate_prices(frame.set_index("Date"))
 
 
+# 네트워크 없이 화면을 시험할 가상 데이터를 만듭니다. 실제 주가와 혼동하면 안 됩니다.
 def demo_prices():
     """Clearly synthetic sample with a late downturn; never a real stock quote."""
     rng = np.random.default_rng(42)
@@ -93,6 +98,7 @@ def demo_prices():
                         index=pd.bdate_range(end=pd.Timestamp.today().normalize() - pd.Timedelta(days=1), periods=len(close)))
 
 
+# 주식의 정규장 1시간봉을 장 시작 기준으로 묶습니다. 마지막 묶음은 4시간보다 짧을 수 있습니다.
 def stock_four_hour(symbol, market, now=None):
     """Session-aligned 4h bars, with the shorter closing session bar retained."""
     import yfinance as yf

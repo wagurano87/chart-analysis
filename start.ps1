@@ -1,3 +1,4 @@
+# 실행: 설치된 가상환경으로 Streamlit을 시작합니다. 127.0.0.1은 이 PC에서만 접속 가능한 주소입니다.
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 $python = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'

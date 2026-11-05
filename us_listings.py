@@ -12,6 +12,7 @@ EXCHANGES = {'N': 'NYSE', 'A': 'NYSE American', 'P': 'NYSE Arca',
              'Z': 'Cboe BZX', 'V': 'IEX'}
 
 
+# Nasdaq Trader의 | 구분 텍스트를 읽습니다. 테스트 종목과 호환되지 않는 특수 티커는 제외하고 ETF 여부를 남깁니다.
 def parse_listing(payload, nasdaq):
     text = payload.decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(text), delimiter='|')
@@ -39,6 +40,7 @@ def parse_listing(payload, nasdaq):
     return rows
 
 
+# NASDAQ과 다른 거래소 데이터가 함께 있는지 검사해 오류 페이지·너무 작은 목록을 걸러냅니다.
 def validate_snapshot(data):
     validate_timestamp(data)
     seen = set()
@@ -56,6 +58,7 @@ def validate_snapshot(data):
     return data
 
 
+# NASDAQ 목록과 다른 미국 거래소 목록을 받아 티커 기준으로 합칩니다. 한글 번역 목록은 아닙니다.
 def download_snapshot():
     combined = {}
     for filename, nasdaq in [('nasdaqlisted.txt', True), ('otherlisted.txt', False)]:
@@ -70,5 +73,6 @@ def download_snapshot():
 _cache = ListingCache(CACHE, download_snapshot, validate_snapshot, '미국 상장 종목 · Nasdaq Trader')
 
 
+# 미국 목록도 국내와 같은 공통 캐시 규칙(24시간 갱신·실패 후 1시간 재시도)을 사용합니다.
 def get_directory():
     return _cache.get()

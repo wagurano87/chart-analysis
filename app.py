@@ -8,6 +8,7 @@ from crypto_data import CRYPTO_MARKETS, crypto_symbol, quote_currency, fetch_cry
 from symbol_search import render_symbol_picker
 from market_data import demo_prices, fetch_prices, read_csv, symbols, stock_four_hour
 
+# 1. 페이지의 제목·넓이·색상을 설정합니다. 아래 st.* 호출이 화면 요소를 만듭니다.
 st.set_page_config(page_title="차트 분석 · Dual MACD", layout="wide")
 st.title("주식·코인 차트 분석")
 st.caption("일봉·주봉 · MACD 6/19/9 + 19/39/9 · RSI · OBV · VRVP · 분석 결과는 자동 주문이나 수익 보장이 아닙니다.")
@@ -22,6 +23,7 @@ st.markdown("""<style>
 
 
 @st.cache_data(ttl=900, show_spinner=False)
+# 같은 종목의 일봉을 15분 동안 재사용합니다. 화면 조작마다 외부 서버를 다시 부르지 않기 위한 캐시입니다.
 def load_prices(ticker, market):
     """Five years of daily prices for daily and weekly analysis."""
     return fetch_prices(ticker, market, "NASDAQ")
@@ -30,6 +32,7 @@ def load_prices(ticker, market):
 st.session_state.setdefault("analysis_ticker", "005930")
 
 
+# 빠른 선택 버튼이 시장·티커를 함께 바꾸고 분석을 요청합니다. session_state는 현재 사용자의 화면 상태입니다.
 def open_favorite(symbol):
     st.session_state['analysis_mode'] = '온라인 시세'
     st.session_state['analysis_market'] = '바이낸스'
@@ -48,6 +51,7 @@ favorites[1].button('◆ 이더리움', key='favorite_eth', on_click=open_favori
                     args=('ETHUSDT',), width='stretch')
 
 
+# 2. 왼쪽 입력 영역입니다. 종목·데이터 방식·지표 설정을 받되 실제 조회는 분석 요청 시 실행합니다.
 with st.sidebar:
     st.header("분석 대상")
     mode = st.selectbox("데이터", ["온라인 시세", "CSV 업로드", "가상 데이터 체험"], key="analysis_mode")
@@ -66,6 +70,7 @@ with st.sidebar:
         adxr_length = int(st.number_input('Length ADXR', min_value=1, max_value=100, value=14))
     st.caption("CSV는 일봉을 입력하세요. 주봉은 일봉에서 합산합니다.")
 
+# 3. 분석 버튼 또는 빠른 선택 버튼이 눌린 경우에만 새 데이터를 준비합니다.
 favorite_requested = st.session_state.pop("favorite_requested", False)
 if submitted or favorite_requested:
     try:
@@ -86,10 +91,12 @@ if submitted or favorite_requested:
         st.session_state.pop("analysis_result", None)
         st.error(str(error))
 
+# 분석 결과가 없으면 사용 안내까지만 표시하고 종료합니다. 오류 뒤 오래된 차트를 새 결과처럼 보여주지 않습니다.
 if "analysis_result" not in st.session_state:
     st.info("왼쪽에서 종목과 데이터 방식을 선택하고 ‘분석하기’를 누르세요. 외부 연결 없이 확인하려면 ‘가상 데이터 체험’을 선택하세요.")
     st.stop()
 
+# 4. 저장된 분석 결과를 꺼냅니다. 입력칸을 바꿨다고 기존 결과의 종목명이 바뀌어서는 안 됩니다.
 daily, provider, tv_symbol, market, ticker, removed, mode = st.session_state["analysis_result"]
 # Fill this container after calculation so the period control sits directly above the chart.
 summary = st.container()
@@ -118,6 +125,7 @@ try:
 except (ValueError, RuntimeError) as error:
     st.error(str(error))
     st.stop()
+# 5. 화면 요약은 완료된 봉 기준입니다. 실시간 미완료 봉은 이후 차트 갱신 경로에서만 추가합니다.
 period = "일" if timeframe == "일봉" else "주" if timeframe == "주봉" else " × 4시간"
 last, prev = frame.iloc[-1], frame.iloc[-2]
 signal = assess(frame)
@@ -140,8 +148,10 @@ with summary:
     if bool(last.MACD19SellSignal):
         st.warning(f"▼ 새 매도 주의 시그널 · {frame.index[-1]:%Y-%m-%d}: MACD 0선 상향 돌파 후 양수 구간에서 오실레이터가 음수로 전환했습니다.")
 
+# 6. 차트 코드가 무거우므로 분석 결과가 준비된 뒤 불러옵니다. 첫 접속 화면을 가볍게 유지합니다.
 from charts import chart_html
 
+# 코인에서만 자동 갱신을 제공합니다. 새 차트마다 식별값을 바꿔 예전 메시지가 섞이지 않게 합니다.
 live_enabled = market in CRYPTO_MARKETS and mode == '온라인 시세' and st.toggle('코인 10초 자동 갱신', value=True, key='crypto_live_enabled')
 live_token = None
 if live_enabled:
@@ -176,6 +186,7 @@ with st.expander("경고 근거 보기"):
     for reason in signal["reasons"]:
         st.write("• " + reason)
 
+# 7. 아래 수치·신호 내역·CSV는 이번 분석의 스냅샷입니다. 10초 갱신 차트와 구분해 안내합니다.
 columns = st.columns(4)
 columns[0].metric((f"종가 ({quote_currency(ticker,market)})" if market in CRYPTO_MARKETS else "종가 (KRW)" if market == "한국" else "종가 (USD)") if tv_symbol else "가상 종가", f"{last.Close:,.2f}", f"{(last.Close / prev.Close - 1) * 100:+.2f}%")
 columns[1].metric("MACD (19,39)", f"{last.MACD:,.4f}", f"{last.MACD - prev.MACD:+.4f}", delta_color="off")
@@ -223,6 +234,7 @@ with st.expander("위험 신호 계산 기준과 한계"):
 - 앱을 다시 분석할 때만 신호가 갱신됩니다. 푸시·텔레그램 알림과 자동 매도는 없습니다.""")
 st.download_button("분석 데이터 CSV 저장", frame.to_csv(index_label="Date").encode("utf-8-sig"), file_name=f"chart-analysis-{timeframe}.csv", mime="text/csv")
 
+# 8. 기업 재무제표는 주식에서만 별도로 조회합니다. 코인에는 기업 매출·영업이익이 없습니다.
 from fundamentals import render_fundamentals
 if market not in CRYPTO_MARKETS:
     render_fundamentals(provider, mode)
