@@ -138,9 +138,14 @@ with summary:
             st.write(', '.join(excluded_prices))
     if timeframe != '4시간봉' and daily.attrs.get('rounded_price_rows', 0):
         st.caption(f"수정주가 계산의 미세 오차 {daily.attrs['rounded_price_rows']}개 봉을 보정했습니다.")
-    st.caption(f"{provider} · {timeframe} · 마지막 완료 봉 {frame.index[-1]:%Y-%m-%d %H:%M} · {len(frame):,}개 봉")
-    if timeframe == "4시간봉":
-        st.caption("코인 4시간봉은 UTC 시작 시각입니다(한국 +9시간). 진행 중 봉은 제외합니다." if market in CRYPTO_MARKETS else "주식 4시간봉은 거래소 현지 시각·정규장 시작 기준입니다. 마지막 봉은 4시간보다 짧을 수 있으며 당일 데이터는 마감 확인 이후 표시합니다.")
+    # 제목에 이미 종목명이 있으므로 요약 줄에는 주기·완료 시각·봉 수만 표시합니다.
+    stamp = frame.index[-1].strftime('%Y-%m-%d %H:%M' if timeframe == '4시간봉' else '%Y-%m-%d')
+    zone = (' UTC' if market in CRYPTO_MARKETS else ' KST' if market == '한국' else ' ET') if timeframe == '4시간봉' else ''
+    timing_help = f'데이터: {provider}. 분석 시점의 마지막 완료 봉 기준입니다.'
+    if timeframe == '4시간봉':
+        timing_help += (' 코인 봉의 시작 시각은 UTC이며 한국 시간은 9시간을 더합니다. 요약은 완료 봉 기준이고 자동 갱신 차트에는 진행 중 봉도 표시됩니다.'
+                        if market in CRYPTO_MARKETS else ' 거래소 현지 시각·정규장 시작 기준입니다. 마지막 봉은 4시간보다 짧을 수 있으며 당일 데이터는 마감 확인 이후 표시합니다.')
+    st.caption(f"{timeframe} · 마지막 완료 봉 {stamp}{zone} · {len(frame):,}봉", help=timing_help)
     if tv_symbol is None:
         st.warning("현재 모든 수치와 신호는 설명용 가상 데이터입니다. 실제 종목의 투자 판단에 사용하지 마세요.")
     notify = st.error if signal["level"] == "위험" else st.warning if signal["level"] == "주의" else st.info
