@@ -658,12 +658,13 @@ window.addEventListener('resize',()=>{
 });
 updateProfile([START, END]);
 const liveToken = LIVE_TOKEN;
+const channelOrigin=new URL(document.baseURI).origin;
 let pendingLive=null, applyingLive=false;
 window.addEventListener('message', event=>{
     const data=event.data;
-    if(!liveToken || !data || data.type!=='chart-live' || data.token!==liveToken) return;
+    if(event.origin!==channelOrigin || !liveToken || !data || data.type!=='chart-live' || data.token!==liveToken) return;
     pendingLive=data;
-    event.source?.postMessage({type:'chart-live-ack',token:liveToken},'*');
+    event.source?.postMessage({type:'chart-live-ack',token:liveToken},channelOrigin);
 });
 async function applyLive() {
     if(!pendingLive || applyingLive || busy || wheelDrawing || pinch || gd._dragging) return;

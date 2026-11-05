@@ -42,9 +42,16 @@ def message_html(message):
     encoded = json.dumps(message, ensure_ascii=True).replace('<', '\\u003c')
     return '''<script>
 const message=PAYLOAD;
+const channelOrigin=new URL(document.baseURI).origin;
 let timer;
-function send(){for(let i=0;i<parent.frames.length;i++) {if(parent.frames[i]!==window) parent.frames[i].postMessage(message,'*');}}
-window.addEventListener('message',e=>{if(e.data?.type==='chart-live-ack' && e.data.token===message.token) clearInterval(timer);});
+const targets=new Set();
+function send(){for(let i=0;i<parent.frames.length;i++) {
+    const target=parent.frames[i];
+    try {if(target!==window && target.document.getElementById('analysis-chart')) {
+        targets.add(target);target.postMessage(message,channelOrigin);
+    }} catch(error) { /* Ignore unrelated cross-origin frames. */ }
+}}
+window.addEventListener('message',e=>{if(e.origin===channelOrigin && targets.has(e.source) && e.data?.type==='chart-live-ack' && e.data.token===message.token) clearInterval(timer);});
 timer=setInterval(send,500);send();setTimeout(()=>clearInterval(timer),9000);
 </script>'''.replace('PAYLOAD', encoded)
 
@@ -70,9 +77,9 @@ def render_live_updates(seed, ticker, market, timeframe, bins, threshold, length
             stamp = pd.Timestamp.now(tz='Asia/Seoul').strftime('%H:%M:%S')
             message = {'type':'chart-live', 'token':token, 'payload':payload,
                        'status':f'10초 자동 갱신 · {stamp} (한국 시간) · 진행 중 {pending}봉 · 시그널은 마감 후 확정'}
-        except Exception as error:
+        except Exception:
             message = {'type':'chart-live', 'token':token,
-                       'error':f'자동 갱신 실패 · 마지막 수신 차트 유지 · {error}'}
+                       'error':'자동 갱신 실패 · 마지막 수신 차트 유지 · 반복되면 분석하기로 다시 조회하세요.'}
         st.iframe(message_html(message), height=1, tab_index=-1)
 
     poll()
